@@ -5,18 +5,20 @@ interface LayoutProps {
   title?: string;
   showHeader?: boolean;
   showFooter?: boolean;
+  minHeight?: boolean;
 }
 
 export function Layout({
   children,
   title = 'Quizza',
-  showHeader = true,
+  showHeader = false,
   showFooter = false,
+  minHeight = true,
 }: LayoutProps) {
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900 md:flex md:justify-center">
       <main
-        className="relative min-h-screen w-full max-w-[500px] overflow-x-hidden bg-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] dark:bg-gray-900"
+        className={`relative w-full max-w-[500px] overflow-x-hidden bg-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] dark:bg-gray-900 ${minHeight ? 'min-h-screen' : 'min-h-[calc(100vh-env(safe-area-inset-top)-env(safe-area-inset-bottom))]'}`}
       >
         {/* Status bar safe area */}
         <div className="absolute inset-x-0 top-0 h-[env(safe-area-inset-top)] bg-white dark:bg-gray-900" />
