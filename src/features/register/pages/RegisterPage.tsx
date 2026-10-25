@@ -164,7 +164,7 @@ export function RegisterPage() {
   };
 
   return (
-    <div className="relative space-y-6">
+    <div className="relative space-y-6 p-6 pb-20">
       {/* Back button - absolute, before progress indicator */}
       {step === 2 && (
         <Button
@@ -244,15 +244,15 @@ export function RegisterPage() {
             noValidate
           >
             <div className="text-center space-y-1">
-              <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Create Account</h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Enter your credentials</p>
+              <h1 className="text-2xl font-semibold text-text-primary dark:text-gray-100">Create Account</h1>
+              <p className="text-sm text-text-primary dark:text-gray-400">Enter your credentials</p>
             </div>
 
             <Input
               ref={emailInputRef}
               label="Email"
               type="email"
-              placeholder="you@example.com"
+              placeholder="Email address"
               value={formData.email}
               onChange={e => handleInputChange('email', e.target.value)}
               error={errors.email}
@@ -265,7 +265,7 @@ export function RegisterPage() {
             <Input
               label="Password"
               type="password"
-              placeholder="••••••••"
+              placeholder="Password"
               value={formData.password}
               onChange={e => handleInputChange('password', e.target.value)}
               error={errors.password}
@@ -279,7 +279,7 @@ export function RegisterPage() {
             <Input
               label="Confirm Password"
               type="password"
-              placeholder="••••••••"
+              placeholder="Confirm Password"
               value={formData.confirmPassword}
               onChange={e => handleInputChange('confirmPassword', e.target.value)}
               error={errors.confirmPassword}
