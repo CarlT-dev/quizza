@@ -21,8 +21,10 @@ export function usePullToRefresh({
   const handleTouchStart = useCallback((e: TouchEvent) => {
     if (isRefreshing) return;
     const scrollTop = containerRef.current?.scrollTop ?? 0;
-    if (scrollTop <= 0) {
-      startYRef.current = e.touches[0].clientY;
+    const touchY = e.touches[0].clientY;
+    // Only allow pull-to-refresh when at top of scroll AND touch starts near top of viewport
+    if (scrollTop <= 0 && touchY < 80) {
+      startYRef.current = touchY;
     }
   }, [isRefreshing]);
 
