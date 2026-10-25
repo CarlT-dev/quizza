@@ -77,7 +77,7 @@ export function HomePage() {
       <main className="flex-1 pb-20">
         <div className="space-y-6">
           {/* Create Quiz Card */}
-          <div className="rounded-3xl overflow-hidden bg-gradient-to-br from-primary-500 to-primary-600 shadow-lg">
+          <div className="rounded-3xl overflow-hidden bg-gradient-to-br from-primary-400 to-primary-600 shadow-lg">
             <div className="p-6">
               <h2 className="text-xl font-bold text-white">Create your Own Quiz</h2>
               <p className="mt-2 text-white/90 text-sm">Build engaging quizzes in minutes with our intuitive editor</p>
