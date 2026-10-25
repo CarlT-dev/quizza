@@ -26,7 +26,7 @@ function TabButton({
       onClick={isActive ? undefined : onActivate}
       onKeyDown={handleKeyDown}
       className={`
-        group inline-flex items-center justify-center gap-2 pl-4 pr-2 py-2 h-10 min-w-[120px] rounded-full
+        group relative inline-flex items-center justify-center pl-4 pr-10 py-2 h-10 min-w-[120px] rounded-full
         text-sm font-medium transition-all duration-200 whitespace-nowrap overflow-hidden text-ellipsis
         border-2 bg-inherit select-none
         ${isActive
@@ -43,7 +43,7 @@ function TabButton({
           type="button"
           onClick={(e) => { e.stopPropagation(); onClose(); }}
           className={`
-            flex-shrink-0 p-1 rounded-full transition-colors
+            absolute right-2 top-1/2 -translate-y-1/2 flex-shrink-0 p-1 rounded-full transition-colors
             ${isActive
               ? 'bg-primary-500 text-white group-hover:bg-primary-600'
               : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 group-hover:bg-primary-400 group-hover:text-white'
@@ -63,6 +63,11 @@ export function CreateQuizPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isSingleActive, setIsSingleActive] = useState(false);
   const [isMultipleActive, setIsMultipleActive] = useState(false);
+  const [isEasyActive, setIsEasyActive] = useState(false);
+  const [isMediumActive, setIsMediumActive] = useState(false);
+  const [isHardActive, setIsHardActive] = useState(false);
+  const [isPublic, setIsPublic] = useState(false);
+  const [itemCount, setItemCount] = useState<number | null>(null);
 
   const handleBack = () => {
     navigate('/');
@@ -81,9 +86,9 @@ export function CreateQuizPage() {
   };
 
   return (
-    <div className="min-h-screen bg-primary-50/10 dark:bg-gray-900">
-      {/* Gradient Header with rounded bottom corners */}
-      <header className="bg-gradient-to-r from-primary-500 to-primary-600 rounded-b-3xl px-4 pb-4">
+    <div className="relative min-h-screen bg-primary-50/10 dark:bg-gray-900">
+      {/* Gradient Header with rounded bottom corners - fixed but constrained to layout width */}
+      <header className="fixed inset-x-0 top-0 z-10 max-w-[500px] mx-auto bg-gradient-to-r from-primary-500 to-primary-600 rounded-b-3xl px-4 pb-4">
         {/* Back button */}
         <Button
           type="button"
@@ -104,8 +109,8 @@ export function CreateQuizPage() {
       </header>
 
       {/* Content area */}
-      <main className="pt-1 pb-20 px-4">
-        <Card className='mt-4'>
+      <main className="pt-1 pb-20 px-4 mt-23">
+        <Card className='mt-4 border border-primary-300'>
             <CardTitle className='mb-6 text-text-primary'>
               Import File
             </CardTitle>
@@ -151,20 +156,20 @@ export function CreateQuizPage() {
           </div>
         </Card>
 
-        <Box className='mt-5'>
+        <Box className='mt-5 border-primary-300'>
           <BoxTitle className='text-text-primary'>
               Question Type
           </BoxTitle>
           <BoxContent>
             <div className="flex gap-2">
               <TabButton
-                text="Single Choice"
+                text="Multiple Choice"
                 isActive={isSingleActive}
                 onActivate={() => setIsSingleActive(true)}
                 onClose={() => setIsSingleActive(false)}
               />
               <TabButton
-                text="Multiple Choice"
+                text="True/False"
                 isActive={isMultipleActive}
                 onActivate={() => setIsMultipleActive(true)}
                 onClose={() => setIsMultipleActive(false)}
@@ -172,6 +177,119 @@ export function CreateQuizPage() {
             </div>
           </BoxContent>
         </Box>
+
+        <Box className='border-primary-300 border-t-0'>
+          <BoxTitle className='text-text-primary'>
+              Difficulty
+          </BoxTitle>
+          <BoxContent>
+            <div className="flex gap-2 flex-wrap">
+              <TabButton
+                text="Easy"
+                isActive={isEasyActive}
+                onActivate={() => setIsEasyActive(true)}
+                onClose={() => setIsEasyActive(false)}
+              />
+              <TabButton
+                text="Medium"
+                isActive={isMediumActive}
+                onActivate={() => setIsMediumActive(true)}
+                onClose={() => setIsMediumActive(false)}
+              />
+              <TabButton
+                text="Hard"
+                isActive={isHardActive}
+                onActivate={() => setIsHardActive(true)}
+                onClose={() => setIsHardActive(false)}
+              />
+            </div>
+          </BoxContent>
+        </Box>
+
+        {/* Number of Items */}
+        <Box className='mt-5 border-primary-300 border-t-0'>
+          <BoxTitle className='text-text-primary'>
+              Number of Items
+          </BoxTitle>
+          <BoxContent>
+            <div className="flex gap-2 flex-wrap">
+              {[
+                { value: 10, label: '10' },
+                { value: 15, label: '15' },
+                { value: 20, label: '20' },
+                { value: 30, label: '30' },
+              ].map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setItemCount(itemCount === value ? null : value)}
+                  className={`
+                    flex-1 min-w-[60px] max-w-[72px] px-3 py-3 rounded-xl border-2 transition-all duration-200
+                    text-center text-sm font-medium
+                    ${itemCount === value
+                      ? 'bg-primary-50 dark:bg-primary-900/30 border-primary-500 text-primary-600 dark:text-primary-400'
+                      : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-primary-300 dark:hover:border-primary-700'
+                    }
+                  `}
+                  aria-pressed={itemCount === value}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </BoxContent>
+        </Box>
+
+        {/* Visibility Toggle */}
+        <Box className='border-primary-300 border-t-0'>
+          <BoxTitle className='text-text-primary'>
+              Visibility
+          </BoxTitle>
+          <BoxContent>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="flex items-center gap-1">
+                  {isPublic ? (
+                    <span className="text-base font-semibold text-primary-600 dark:text-primary-400">
+                      Public
+                    </span>
+                  ) : (
+                    <span className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                      Private
+                    </span>
+                  )}
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    {isPublic ? '(shareable to everyone)' : '(not shareable)'}
+                  </span>
+                </span>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isPublic}
+                  onChange={(e) => setIsPublic(e.target.checked)}
+                  className="sr-only peer outline-0"
+                />
+                <div className="relative w-12 h-7 rounded-full transition-colors duration-200
+                  peer-focus:outline-none peer-focus:ring-0 peer-focus:ring-offset-0
+                  peer-checked:bg-primary-500
+                  bg-gray-300 dark:bg-gray-600
+                " />
+                <span className="absolute left-1 top-1 w-5 h-5 rounded-full bg-white shadow-md transition-transform duration-200
+                  peer-checked:translate-x-5
+                " />
+              </label>
+            </div>
+          </BoxContent>
+        </Box>
+
+        {/* Submit Button */}
+        <Button
+          className="mt-5 w-full"
+          size="lg"
+        >
+          Create Quiz
+        </Button>
       </main>
     </div>
   );

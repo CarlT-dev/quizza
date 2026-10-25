@@ -55,7 +55,6 @@ export function PullToRefresh({
       className="relative min-h-screen overflow-auto"
       style={{
         touchAction: 'pan-y',
-        overscrollBehaviorY: 'contain', // Disable native pull-to-refresh
       }}
     >
       {/* Pull to Refresh Indicator */}
