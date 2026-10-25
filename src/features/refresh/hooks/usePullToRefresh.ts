@@ -17,7 +17,8 @@ export function usePullToRefresh({
   const startYRef = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+  // Touch handlers as regular functions (not React synthetic) to allow preventDefault
+  const handleTouchStart = useCallback((e: TouchEvent) => {
     if (isRefreshing) return;
     const scrollTop = containerRef.current?.scrollTop ?? 0;
     if (scrollTop <= 0) {
@@ -25,7 +26,7 @@ export function usePullToRefresh({
     }
   }, [isRefreshing]);
 
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+  const handleTouchMove = useCallback((e: TouchEvent) => {
     if (isRefreshing || startYRef.current === null) return;
 
     const currentY = e.touches[0].clientY;
@@ -61,6 +62,22 @@ export function usePullToRefresh({
     startYRef.current = null;
   }, [isPulling, pullDistance, threshold, isRefreshing, onRefresh]);
 
+  // Attach touch listeners with { passive: false } to allow preventDefault
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: true });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [handleTouchStart, handleTouchMove, handleTouchEnd]);
+
   // Reset on window resize or orientation change
   useEffect(() => {
     const handleResize = () => {
@@ -80,10 +97,6 @@ export function usePullToRefresh({
     pullDistance,
     isRefreshing,
     progress: Math.min(pullDistance / threshold, 1),
-    handlers: {
-      onTouchStart: handleTouchStart,
-      onTouchMove: handleTouchMove,
-      onTouchEnd: handleTouchEnd,
-    },
+    // Handlers no longer needed - attached via useEffect above
   };
 }
