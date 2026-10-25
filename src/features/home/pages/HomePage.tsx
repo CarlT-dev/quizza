@@ -45,7 +45,7 @@ export function HomePage() {
   }, [notificationOpen]);
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900">
+    <div className="flex flex-col min-h-screen">
       {/* Top Section */}
       <header className="flex items-center justify-between px-2 py-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         {/* Left side: Avatar + Greeting + Username */}
@@ -55,7 +55,7 @@ export function HomePage() {
           </div>
           <div>
             <p className="text-sm text-gray-500 dark:text-gray-400">{getGreeting()}</p>
-            <p className="text-base font-semibold text-gray-900 dark:text-gray-100">{username}</p>
+            <p className="text-base font-semibold text-text-primary dark:text-gray-100">{username}</p>
           </div>
         </div>
 
@@ -69,13 +69,13 @@ export function HomePage() {
           aria-label="Notifications"
           aria-expanded={notificationOpen}
         >
-          <Bell className="w-6 h-6 text-gray-600 dark:text-gray-300" />
+          <Bell className="w-6 h-6 text-text-primary dark:text-gray-300" />
         </Button>
       </header>
 
       {/* Main Content */}
       <main className="flex-1 pb-20">
-        <div className="space-y-6">
+        <div className="space-y-6 pt-2 px-6">
           {/* Create Quiz Card */}
           <div className="rounded-3xl overflow-hidden bg-gradient-to-br from-primary-400 to-primary-600 shadow-lg">
             <div className="p-6">
@@ -88,7 +88,7 @@ export function HomePage() {
                 size="md"
                 radius="rounded"
                 className="sm:w-auto bg-white text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-100"
-                onClick={() => {}}
+                onClick={() => navigate('/create-quiz')}
               >
                 Create Quiz
               </Button>

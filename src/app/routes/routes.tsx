@@ -6,6 +6,7 @@ import { RegisterPage } from '@/features/register';
 import { ForgotPasswordPage } from '@/features/forgot-password';
 import { NotFoundPage } from '@/features/not-found';
 import { ProtectedRoute } from '@/features/auth/components/ProtectedRoute';
+import { CreateQuizPage } from '@/features/create-quiz';
 
 export function AppRoutes() {
   return (
@@ -16,6 +17,7 @@ export function AppRoutes() {
         <Route path="/forgot-password" element={<Layout title="Forgot Password"><ForgotPasswordPage /></Layout>} />
         <Route element={<ProtectedRoute />}>
           <Route path="/" element={<Layout title="Quizza" showFooterNav><HomePage /></Layout>} />
+          <Route path="/create-quiz" element={<Layout><CreateQuizPage /></Layout>} />
         </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

@@ -48,7 +48,7 @@ export function LoginPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6 pb-20">
       {/* Logo */}
       <div className="flex flex-col items-center text-center mb-8">
         <img
@@ -61,8 +61,8 @@ export function LoginPage() {
 
       {/* Welcome text */}
       <div className="space-y-1 mb-12">
-        <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Welcome back!</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400">Login to continue</p>
+        <h2 className="text-2xl font-semibold text-text-primary dark:text-gray-100">Welcome back!</h2>
+        <p className="text-sm text-text-primary dark:text-gray-400">Login to continue</p>
       </div>
 
       {submitError && (

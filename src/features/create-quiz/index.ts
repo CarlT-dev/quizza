@@ -1,0 +1,1 @@
+export { CreateQuizPage } from './pages/CreateQuizPage';

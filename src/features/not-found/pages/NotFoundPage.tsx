@@ -5,14 +5,14 @@ export function NotFoundPage() {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
+    <div className="min-h-screen flex items-center justify-center p-6 pb-20">
       <div className="text-center mb-15">
         <img
           src="/page-not-found.png"
           alt="Page not found"
           className="mx-auto w-40"
         />
-        <p className="text-primary-600 dark:text-gray-300 mb-5">
+        <p className="text-[#2b5ecc] dark:text-gray-300 mb-5">
           Page not found
         </p>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
