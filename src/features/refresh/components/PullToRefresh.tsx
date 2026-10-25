@@ -39,7 +39,6 @@ export function PullToRefresh({
     pullDistance,
     isRefreshing,
     progress,
-    handlers,
   } = usePullToRefresh({ onRefresh: handleRefresh, threshold, resistance });
 
   // Animate the indicator height/opacity based on progress
@@ -53,7 +52,6 @@ export function PullToRefresh({
   return (
     <div
       ref={containerRef}
-      {...handlers}
       className="relative min-h-screen overflow-auto"
       style={{
         touchAction: 'pan-y',
