@@ -52,7 +52,7 @@ export function LoginPage() {
       {/* Logo */}
       <div className="flex flex-col items-center text-center mb-8">
         <img
-          src="/logo%20quizza.png"
+          src="/logo.png"
           alt="Quizza logo"
           className="w-24 h-24 object-contain mb-3"
         />
