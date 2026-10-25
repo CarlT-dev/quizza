@@ -73,21 +73,21 @@ export function ForgotPasswordPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-md mx-auto">
+    <div className="space-y-6 max-w-md mx-auto p-6 pb-20">
       {/* Logo */}
       <div className="flex flex-col items-center text-center mb-8">
         <img
-          src="/logo%20quizza.png"
+          src="/logo.png"
           alt="Quizza logo"
           className="w-24 h-24 object-contain mb-3"
         />
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Quizza</h1>
+        <h1 className="text-2xl font-bold text-text-primary dark:text-gray-100">Quizza</h1>
       </div>
 
       {/* Title */}
       <div className="text-center space-y-1 mb-6">
-        <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Forgot Password?</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400">Enter your email to receive a reset link</p>
+        <h2 className="text-2xl font-semibold text-text-primary dark:text-gray-100">Forgot Password?</h2>
+        <p className="text-sm text-text-primary dark:text-gray-400">Enter your email to receive a reset link</p>
       </div>
 
       {/* Form */}
