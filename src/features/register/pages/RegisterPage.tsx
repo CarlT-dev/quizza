@@ -252,7 +252,7 @@ export function RegisterPage() {
               ref={emailInputRef}
               label="Email"
               type="email"
-              placeholder="you@example.com"
+              placeholder="Email address"
               value={formData.email}
               onChange={e => handleInputChange('email', e.target.value)}
               error={errors.email}
@@ -265,7 +265,7 @@ export function RegisterPage() {
             <Input
               label="Password"
               type="password"
-              placeholder="••••••••"
+              placeholder="Password"
               value={formData.password}
               onChange={e => handleInputChange('password', e.target.value)}
               error={errors.password}
@@ -279,7 +279,7 @@ export function RegisterPage() {
             <Input
               label="Confirm Password"
               type="password"
-              placeholder="••••••••"
+              placeholder="Confirm password"
               value={formData.confirmPassword}
               onChange={e => handleInputChange('confirmPassword', e.target.value)}
               error={errors.confirmPassword}
