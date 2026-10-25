@@ -26,7 +26,7 @@ export const Box = forwardRef<HTMLDivElement, BoxProps>(
     };
 
     const bgStyles = {
-      default: 'bg-white dark:bg-gray-800',
+      default: 'bg-inheret dark:bg-gray-800',
       muted: 'bg-gray-50 dark:bg-gray-900/50',
       transparent: 'bg-transparent',
     };
