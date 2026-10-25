@@ -32,7 +32,7 @@ export function Layout({
         )}
 
         {/* App content */}
-        <div className="p-4 pb-20">{children}</div>
+        <div className="p-8 pb-20">{children}</div>
 
         {showFooter && (
           <footer className="absolute bottom-0 inset-x-0 p-4 border-t border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
