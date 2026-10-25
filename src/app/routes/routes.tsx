@@ -15,7 +15,7 @@ export function AppRoutes() {
         <Route path="/register" element={<Layout title="Register"><RegisterPage /></Layout>} />
         <Route path="/forgot-password" element={<Layout title="Forgot Password"><ForgotPasswordPage /></Layout>} />
         <Route element={<ProtectedRoute />}>
-          <Route path="/" element={<Layout title="Quizza"><HomePage /></Layout>} />
+          <Route path="/" element={<Layout title="Quizza" showFooterNav><HomePage /></Layout>} />
         </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

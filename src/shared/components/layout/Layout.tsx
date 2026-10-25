@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react';
+import { FooterNav } from './FooterNav';
 
 interface LayoutProps {
   children: ReactNode;
   title?: string;
   showHeader?: boolean;
   showFooter?: boolean;
+  showFooterNav?: boolean;
   minHeight?: boolean;
 }
 
@@ -13,6 +15,7 @@ export function Layout({
   title = 'Quizza',
   showHeader = false,
   showFooter = false,
+  showFooterNav = false,
   minHeight = true,
 }: LayoutProps) {
   return (
@@ -32,7 +35,7 @@ export function Layout({
         )}
 
         {/* App content */}
-        <div className="p-8 pb-20">{children}</div>
+        <div className="p-6 pb-20">{children}</div>
 
         {showFooter && (
           <footer className="absolute bottom-0 inset-x-0 p-4 border-t border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
@@ -41,6 +44,8 @@ export function Layout({
             </p>
           </footer>
         )}
+
+        {showFooterNav && <FooterNav />}
 
         {/* Home indicator safe area */}
         <div className="absolute inset-x-0 bottom-0 h-[env(safe-area-inset-bottom)] bg-white dark:bg-gray-900" />
