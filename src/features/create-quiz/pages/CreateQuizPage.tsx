@@ -1,9 +1,11 @@
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Upload, X } from 'lucide-react';
+import { ChevronLeft, Upload, X, Loader2, AlertCircle, CheckCircle, FileText } from 'lucide-react';
 import { Button } from '@/shared/components/ui';
 import { Card, CardTitle } from '@/shared/components/ui';
 import { Box, BoxTitle, BoxContent } from '@/shared/components/ui/Box';
+import { useQuizGeneration } from '@/features/genai';
+import { createQuizRequest } from '@/features/genai/schema';
 
 // Local reusable capsule tab component
 function TabButton({
@@ -61,6 +63,8 @@ function TabButton({
 export function CreateQuizPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // UI State
   const [isSingleActive, setIsSingleActive] = useState(false);
   const [isMultipleActive, setIsMultipleActive] = useState(false);
   const [isEasyActive, setIsEasyActive] = useState(false);
@@ -68,6 +72,11 @@ export function CreateQuizPage() {
   const [isHardActive, setIsHardActive] = useState(false);
   const [isPublic, setIsPublic] = useState(false);
   const [itemCount, setItemCount] = useState<number | null>(null);
+  const [topic, setTopic] = useState('');
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+
+  // Quiz Generation Hook
+  const { isLoading, error, quizData, generate, reset } = useQuizGeneration();
 
   const handleBack = () => {
     navigate('/');
@@ -80,10 +89,150 @@ export function CreateQuizPage() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      console.log('File selected:', file.name);
-      // TODO: Handle file upload
+      setUploadedFileName(file.name);
+      // DOCX and PDF are binary formats - parsing them requires additional libraries
+      // For now, use the filename as topic hint. In the future, we could:
+      // - Use mammoth.js for DOCX parsing
+      // - Use pdf.js for PDF parsing
+      // - Or send files to a backend for text extraction
+      setTopic(`Quiz based on uploaded file: ${file.name}`);
     }
   };
+
+  const handleRemoveFile = () => {
+    setUploadedFileName(null);
+    setTopic('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const getQuestionType = (): 'single' | 'multiple' | null => {
+    if (isSingleActive) return 'single';
+    if (isMultipleActive) return 'multiple';
+    return null;
+  };
+
+  const getDifficulty = (): 'easy' | 'medium' | 'hard' | null => {
+    if (isEasyActive) return 'easy';
+    if (isMediumActive) return 'medium';
+    if (isHardActive) return 'hard';
+    return null;
+  };
+
+  const canGenerate = () => {
+    return (
+      topic.trim().length > 0 &&
+      getQuestionType() !== null &&
+      getDifficulty() !== null &&
+      itemCount !== null
+    );
+  };
+
+  const handleGenerateQuiz = async () => {
+    const request = createQuizRequest({
+      topic,
+      questionType: getQuestionType()!,
+      difficulty: getDifficulty()!,
+      itemCount,
+      isPublic,
+    });
+
+    if (!request) {
+      return;
+    }
+
+    const result = await generate(request);
+
+    if (result.success && result.data) {
+      // Navigate to quiz preview page with generated data
+      // For now, log the result and show success
+      console.log('Quiz generated successfully:', result.data);
+      // TODO: Navigate to preview page or save to Firebase
+      alert(`Quiz generated successfully with ${result.data.questions.length} questions!`);
+    }
+  };
+
+  const handleBackToForm = () => {
+    reset();
+  };
+
+  // Show success state if quiz was generated
+  if (quizData) {
+    return (
+      <div className="relative min-h-screen bg-primary-50/10 dark:bg-gray-900">
+        <header className="fixed inset-x-0 top-0 z-10 max-w-[500px] mx-auto bg-gradient-to-r from-primary-500 to-primary-600 rounded-b-3xl px-4 pb-4">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleBackToForm}
+            className="absolute top-6 left-4 p-2 text-white hover:bg-white/20"
+            aria-label="Create another quiz"
+          >
+            <ChevronLeft className="w-7 h-7" aria-hidden="true" />
+          </Button>
+
+          <div className="pt-4 ml-15">
+            <h1 className="text-3xl font-bold text-white">Quizza</h1>
+            <p className="mt-0 text-white/80 text-lg">Quiz Generated</p>
+          </div>
+        </header>
+
+        <main className="pt-1 pb-20 px-4 mt-23">
+          <Card className='mt-4 border border-primary-300'>
+            <CardTitle className='mb-6 text-text-primary flex items-center gap-2'>
+              <CheckCircle className="w-6 h-6 text-green-500" aria-hidden="true" />
+              Quiz Generated Successfully!
+            </CardTitle>
+
+            <div className="space-y-4">
+              <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl">
+                <p className="text-green-800 dark:text-green-200 font-medium">
+                  Generated <span className="font-bold">{quizData.questions.length}</span> questions on <span className="font-bold">{quizData.metadata.topic}</span>
+                </p>
+                <p className="text-sm text-green-700 dark:text-green-300 mt-1">
+                  Type: {quizData.metadata.questionType.replace('_', ' ')} • Difficulty: {quizData.metadata.difficulty}
+                </p>
+              </div>
+
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {quizData.questions.slice(0, 5).map((q, i) => (
+                  <div key={q.id} className="p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
+                    <p className="font-medium text-sm">{i + 1}. {q.question}</p>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {q.options.map((opt, idx) => (
+                        <span
+                          key={idx}
+                          className={`px-2 py-1 text-xs rounded ${idx === q.correctAnswerIndex ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'}`}
+                        >
+                          {opt} {idx === q.correctAnswerIndex && '✓'}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                {quizData.questions.length > 5 && (
+                  <p className="text-center text-sm text-gray-500 dark:text-gray-400">
+                    + {quizData.questions.length - 5} more questions
+                  </p>
+                )}
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <Button className="flex-1" onClick={handleBackToForm}>
+                  Create Another Quiz
+                </Button>
+                <Button variant="outline" className="flex-1" onClick={() => navigate('/')}>
+                  Go to Home
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="relative min-h-screen bg-primary-50/10 dark:bg-gray-900">
@@ -110,12 +259,12 @@ export function CreateQuizPage() {
 
       {/* Content area */}
       <main className="pt-1 pb-20 px-4 mt-23">
+        {/* Import File Card - Dashed border */}
         <Card className='mt-4 border border-primary-300'>
             <CardTitle className='mb-6 text-text-primary'>
               Import File
             </CardTitle>
               <div className="max-w-[500px] mx-auto">
-            {/* Import File Card - Dashed border */}
             <div
               className="relative rounded-2xl border-2 border-dashed border-primary-300 dark:border-primary-700 bg-primary-50 dark:bg-gray-800/50 p-8 text-center cursor-pointer hover:border-primary-400 dark:hover:border-primary-600 transition-colors"
               onClick={handleFileClick}
@@ -132,10 +281,10 @@ export function CreateQuizPage() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".json,.txt,.csv"
+                accept=".docx,.pdf"
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 onChange={handleFileChange}
-                aria-hidden="true"
+                aria-label="Upload quiz file (DOCX or PDF)"
               />
 
               <div className="space-y-1">
@@ -148,13 +297,31 @@ export function CreateQuizPage() {
                 </div>
 
                 <p className="text-xs text-gray-400 dark:text-gray-500">
-                  Supports: JSON, TXT, CSV
+                  Supports: DOCX, PDF
                 </p>
               </div>
             </div>
-
           </div>
         </Card>
+
+        {/* File Selected Display */}
+        {uploadedFileName && (
+          <div className="mt-3 p-3 bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-800 rounded-xl flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-primary-500" aria-hidden="true" />
+              <span className="text-sm font-medium text-primary-700 dark:text-primary-300 truncate max-w-[250px]">
+                {uploadedFileName}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleRemoveFile}
+              className="text-primary-500 hover:text-primary-700 text-sm font-medium"
+            >
+              Remove
+            </button>
+          </div>
+        )}
 
         <Box className='mt-5 border-primary-300'>
           <BoxTitle className='text-text-primary'>
@@ -175,6 +342,9 @@ export function CreateQuizPage() {
                 onClose={() => setIsMultipleActive(false)}
               />
             </div>
+            {(!isSingleActive && !isMultipleActive) && (
+              <p className="mt-2 text-xs text-red-500">Please select a question type</p>
+            )}
           </BoxContent>
         </Box>
 
@@ -203,6 +373,9 @@ export function CreateQuizPage() {
                 onClose={() => setIsHardActive(false)}
               />
             </div>
+            {(!isEasyActive && !isMediumActive && !isHardActive) && (
+              <p className="mt-2 text-xs text-red-500">Please select a difficulty</p>
+            )}
           </BoxContent>
         </Box>
 
@@ -237,6 +410,9 @@ export function CreateQuizPage() {
                 </button>
               ))}
             </div>
+            {itemCount === null && (
+              <p className="mt-2 text-xs text-red-500">Please select number of items</p>
+            )}
           </BoxContent>
         </Box>
 
@@ -283,16 +459,37 @@ export function CreateQuizPage() {
           </BoxContent>
         </Box>
 
+        {/* Error Display */}
+        {error && (
+          <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl flex items-start gap-2" role="alert">
+            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" aria-hidden="true" />
+            <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+          </div>
+        )}
+
         {/* Submit Button */}
         <Button
           className="mt-5 w-full"
           size="lg"
+          disabled={isLoading || !canGenerate()}
+          onClick={handleGenerateQuiz}
         >
-          Create Quiz
+          {isLoading ? (
+            <span className="flex items-center justify-center gap-2">
+              <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
+              Generating Quiz...
+            </span>
+          ) : (
+            'Create Quiz'
+          )}
         </Button>
+
+        {!canGenerate() && !isLoading && (
+          <p className="mt-2 text-center text-xs text-gray-500 dark:text-gray-400">
+            Fill in all fields to enable quiz generation
+          </p>
+        )}
       </main>
     </div>
   );
 }
-
-
