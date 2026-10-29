@@ -342,9 +342,6 @@ export function CreateQuizPage() {
                 onClose={() => setIsMultipleActive(false)}
               />
             </div>
-            {(!isSingleActive && !isMultipleActive) && (
-              <p className="mt-2 text-xs text-red-500">Please select a question type</p>
-            )}
           </BoxContent>
         </Box>
 
@@ -373,14 +370,11 @@ export function CreateQuizPage() {
                 onClose={() => setIsHardActive(false)}
               />
             </div>
-            {(!isEasyActive && !isMediumActive && !isHardActive) && (
-              <p className="mt-2 text-xs text-red-500">Please select a difficulty</p>
-            )}
           </BoxContent>
         </Box>
 
         {/* Number of Items */}
-        <Box className='mt-5 border-primary-300 border-t-0'>
+        <Box className='border-primary-300 border-t-0'>
           <BoxTitle className='text-text-primary'>
               Number of Items
           </BoxTitle>
@@ -410,9 +404,6 @@ export function CreateQuizPage() {
                 </button>
               ))}
             </div>
-            {itemCount === null && (
-              <p className="mt-2 text-xs text-red-500">Please select number of items</p>
-            )}
           </BoxContent>
         </Box>
 
@@ -469,7 +460,7 @@ export function CreateQuizPage() {
 
         {/* Submit Button */}
         <Button
-          className="mt-5 w-full"
+          className="mt-15 w-full"
           size="lg"
           disabled={isLoading || !canGenerate()}
           onClick={handleGenerateQuiz}
