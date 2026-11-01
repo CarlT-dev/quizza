@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { FooterNav } from './FooterNav';
+import { PageTransition } from '@/shared/components/ui';
 
 interface LayoutProps {
   children: ReactNode;
@@ -34,18 +35,23 @@ export function Layout({
           </header>
         )}
 
-        {/* App content */}
-        <div className='bg-inherit dark:bg-gray-900'>{children}</div>
+        {/* App content - wrapped in PageTransition for slide transitions */}
+        <PageTransition className='bg-inherit dark:bg-gray-900 flex-1 min-h-0'>{children}</PageTransition>
+
+        {/* FooterNav - OUTSIDE AnimatePage so it stays visible during transitions */}
+        {showFooterNav && (
+          <div className="relative z-20">
+            <FooterNav />
+          </div>
+        )}
 
         {showFooter && (
-          <footer className="absolute bottom-0 inset-x-0 p-4 border-t border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
+          <footer className="relative z-10 p-4 border-t border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
             <p className="text-center text-sm text-gray-500 dark:text-gray-400">
               &copy; {new Date().getFullYear()} Quizza. All rights reserved.
             </p>
           </footer>
         )}
-
-        {showFooterNav && <FooterNav />}
 
         {/* Home indicator safe area */}
         <div className="absolute inset-x-0 bottom-0 h-[env(safe-area-inset-bottom)] bg-white dark:bg-gray-900" />

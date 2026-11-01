@@ -1,137 +1,82 @@
-/**
- * Prompt Builder for Quiz Generation
- * Converts QuizRequest into structured prompts for Gemini
- */
-
 import type { QuizRequest } from '../schema';
 
 /**
  * Builds the system prompt for quiz generation
  */
 export function buildSystemPrompt(): string {
-  return `You are an expert quiz generator. Create high-quality, well-structured quizzes based on the given topic and parameters.
+  return `Expert quiz generator. Output ONLY valid JSON matching the schema.
 
 RULES:
-1. Output ONLY valid JSON matching the exact schema provided
-2. Questions must be accurate, clear, and unambiguous
-3. Distractors (wrong answers) must be plausible but clearly incorrect
-4. Explanations should be educational and concise
-5. Difficulty must match the requested level:
-   - Easy: Basic recall, straightforward concepts
-   - Medium: Application, analysis, some critical thinking
-   - Hard: Synthesis, evaluation, complex reasoning
-6. For true/false questions, use exactly 2 options: "True" and "False"
-7. For multiple choice, use exactly 4 options`;
+1. Questions: accurate, clear, unambiguous
+2. Distractors: plausible but clearly wrong
+3. Explanations: concise, educational
+4. Difficulty: Easy=recall, Medium=application, Hard=synthesis/evaluation
+5. True/False: exactly 2 options ("True","False")
+6. Multiple Choice: exactly 4 options (A,B,C,D)
+7. Identification: question with blank, correct answer + 2-3 alternatives
+8. Enumeration: ordered list (if sequence implied) or unordered set
+9. All matching: CASE-INSENSITIVE`;
 }
 
 /**
  * Builds the user prompt with the quiz request parameters
  */
 export function buildUserPrompt(request: QuizRequest): string {
-  const { topic, questionType, difficulty, itemCount, additionalContext } = request;
+  const { topic, questionTypes, difficulties, itemCount, additionalContext } = request;
 
-  const typeInstruction = questionType === 'multiple_choice'
-    ? 'Generate multiple choice questions with exactly 4 options each (A, B, C, D).'
-    : 'Generate true/false questions with exactly 2 options: "True" and "False".';
+  const typeMap: Record<string, string> = {
+    multiple_choice: 'Multiple Choice (4 options A,B,C,D)',
+    true_false: 'True/False (2 options)',
+    identification: 'Identification (fill-in-blank with answer + alternatives)',
+    enumeration: 'Enumeration (ordered/unordered list)',
+  };
 
-  const difficultyGuidance = {
-    easy: 'Questions should test basic knowledge and recall. Use clear, direct language.',
-    medium: 'Questions should require understanding and application of concepts. Some analysis needed.',
-    hard: 'Questions should require synthesis, evaluation, and complex reasoning. Multi-step thinking.',
-  }[difficulty];
+  const diffMap: Record<string, string> = {
+    easy: 'Easy (basic recall)',
+    medium: 'Medium (application)',
+    hard: 'Hard (synthesis/evaluation)',
+  };
 
-  return `Generate a quiz with the following specifications:
+  const typeDesc = questionTypes.map(t => typeMap[t]).join(', ');
+  const diffDesc = difficulties.map(d => diffMap[d]).join(', ');
 
-TOPIC: "${topic}"
+  // Calculate distribution
+  const questionsPerType = Math.floor(itemCount / questionTypes.length);
+  const remainder = itemCount % questionTypes.length;
 
-PARAMETERS:
-- Question Type: ${questionType.replace('_', ' ')}
-- Difficulty: ${difficulty}
-- Number of Questions: ${itemCount}
-${additionalContext ? `- Additional Context: ${additionalContext}` : ''}
+  return `Generate ${itemCount} questions on "${topic}" with mixed types and difficulties.
 
-${typeInstruction}
-${difficultyGuidance}
+QUESTION TYPES: ${typeDesc}
+DIFFICULTIES: ${diffDesc}
 
-OUTPUT FORMAT (JSON only, no markdown, no extra text):
+DISTRIBUTION GUIDE:
+${questionTypes.map((t, i) => {
+  const count = questionsPerType + (i < remainder ? 1 : 0);
+  return `- ${typeMap[t]}: ~${count} questions spread across ${diffDesc}`;
+}).join('\n')}
+
+${additionalContext ? `Context: ${additionalContext}` : ''}
+
+OUTPUT (JSON only):
 {
   "questions": [
-    {
-      "id": "q1",
-      "question": "Question text here?",
-      "options": ["Option A", "Option B", "Option C", "Option D"],
-      "correctAnswerIndex": 0,
-      "explanation": "Brief explanation of why this is correct",
-      "difficulty": "${difficulty}",
-      "type": "${questionType}"
-    }
+    {"id":"q1","question":"...","options":[],"correctAnswerIndex":0,"explanation":"...","difficulty":"easy|medium|hard","type":"multiple_choice|true_false|identification|enumeration"}
   ],
-  "metadata": {
-    "topic": "${topic}",
-    "totalQuestions": ${itemCount},
-    "questionType": "${questionType}",
-    "difficulty": "${difficulty}",
-    "generatedAt": "${new Date().toISOString()}",
-    "model": "gemini-1.5-flash"
-  }
+  "metadata":{"topic":"${topic}","totalQuestions":${itemCount},"questionTypes":${JSON.stringify(questionTypes)},"difficulties":${JSON.stringify(difficulties)},"generatedAt":"${new Date().toISOString()}","model":"auto"}
 }
 
-Generate exactly ${itemCount} questions. Ensure all questions are unique and cover different aspects of the topic.`;
+IMPORTANT: Mix question types and difficulties as specified. Each question must have its own type and difficulty. Unique questions covering different aspects.`;
 }
 
 /**
- * Builds few-shot examples for better consistency
+ * Builds minimal few-shot examples for all supported types
  */
-export function buildFewShotExamples(questionType: 'multiple_choice' | 'true_false'): string {
-  if (questionType === 'multiple_choice') {
-    return `EXAMPLES:
-
-Example 1 (Multiple Choice - Easy):
-{
-  "id": "q1",
-  "question": "What is the capital of France?",
-  "options": ["London", "Paris", "Berlin", "Madrid"],
-  "correctAnswerIndex": 1,
-  "explanation": "Paris is the capital city of France.",
-  "difficulty": "easy",
-  "type": "multiple_choice"
-}
-
-Example 2 (Multiple Choice - Medium):
-{
-  "id": "q2",
-  "question": "Which planet has the most moons in our solar system?",
-  "options": ["Jupiter", "Saturn", "Uranus", "Neptune"],
-  "correctAnswerIndex": 1,
-  "explanation": "As of 2024, Saturn has 146 confirmed moons, the most of any planet.",
-  "difficulty": "medium",
-  "type": "multiple_choice"
-}`;
-  }
-
-  return `EXAMPLES:
-
-Example 1 (True/False - Easy):
-{
-  "id": "q1",
-  "question": "The Earth is the third planet from the Sun.",
-  "options": ["True", "False"],
-  "correctAnswerIndex": 0,
-  "explanation": "Earth orbits the Sun at the third position in our solar system.",
-  "difficulty": "easy",
-  "type": "true_false"
-}
-
-Example 2 (True/False - Medium):
-{
-  "id": "q2",
-  "question": "Photosynthesis occurs in the mitochondria of plant cells.",
-  "options": ["True", "False"],
-  "correctAnswerIndex": 1,
-  "explanation": "Photosynthesis occurs in chloroplasts, not mitochondria. Mitochondria are for cellular respiration.",
-  "difficulty": "medium",
-  "type": "true_false"
-}`;
+export function buildFewShotExamples(): string {
+  return `Examples:
+Multiple Choice: {"id":"q1","question":"Capital of France?","options":["London","Paris","Berlin","Madrid"],"correctAnswerIndex":1,"explanation":"Paris is France's capital.","difficulty":"easy","type":"multiple_choice"}
+True/False: {"id":"q1","question":"Earth is 3rd from Sun.","options":["True","False"],"correctAnswerIndex":0,"explanation":"Earth orbits 3rd.","difficulty":"easy","type":"true_false"}
+Identification: {"id":"q1","question":"Capital of Japan is _____.","options":[],"correctAnswer":"Tokyo","acceptableAnswers":["Tōkyō","Tokio"],"explanation":"Since 1868.","difficulty":"easy","type":"identification"}
+Enumeration: {"id":"q1","question":"First 3 planets from Sun.","options":[],"correctAnswers":["Mercury","Venus","Earth"],"explanation":"Inner planets in order.","difficulty":"easy","type":"enumeration"}`;
 }
 
 /**
@@ -140,7 +85,7 @@ Example 2 (True/False - Medium):
 export function buildCompletePrompt(request: QuizRequest): { systemPrompt: string; userPrompt: string } {
   const systemPrompt = buildSystemPrompt();
   const userPrompt = buildUserPrompt(request);
-  const fewShot = buildFewShotExamples(request.questionType);
+  const fewShot = buildFewShotExamples();
 
   return {
     systemPrompt,

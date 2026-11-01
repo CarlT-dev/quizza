@@ -2,10 +2,12 @@ import { forwardRef } from 'react';
 import type { ButtonHTMLAttributes } from 'react';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'none';
   size?: 'sm' | 'md' | 'lg';
   radius?: 'default' | 'rounded';
   isLoading?: boolean;
+  /** Custom padding override (e.g., "p-1", "px-2 py-1"). When provided, replaces size-based padding. */
+  padding?: string;
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -18,6 +20,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       isLoading = false,
       disabled,
       className = '',
+      padding,
       ...props
     },
     ref
@@ -35,6 +38,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       secondary: 'bg-gray-100 text-gray-900 hover:bg-gray-200 focus:ring-gray-500 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600',
       outline: 'border-2 border-primary-500 text-primary-500 hover:bg-primary-50 focus:ring-primary-500 dark:hover:bg-primary-950',
       ghost: 'text-primary-500 hover:bg-primary-50 focus:ring-primary-500 dark:hover:bg-primary-950',
+      none: 'text-primary-900'
     };
 
     const sizeStyles = {
@@ -43,11 +47,21 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       lg: 'px-6 py-3 text-lg gap-2.5',
     };
 
+    // Use custom padding if provided, otherwise use size-based padding
+    // We need to extract text-size and gap from sizeStyles when using custom padding
+    const sizeOnlyStyles = {
+      sm: 'text-sm gap-1.5',
+      md: 'text-base gap-2',
+      lg: 'text-lg gap-2.5',
+    };
+
+    const paddingStyles = padding ? `${padding} ${sizeOnlyStyles[size]}` : sizeStyles[size];
+
     return (
       <button
         ref={ref}
         disabled={disabled || isLoading}
-        className={`${baseStyles} ${radiusStyles[radius]} ${variantStyles[variant]} ${sizeStyles[size]} ${className}`}
+        className={`${baseStyles} ${radiusStyles[radius]} ${variantStyles[variant]} ${paddingStyles} ${className}`}
         {...props}
       >
         {isLoading && (
