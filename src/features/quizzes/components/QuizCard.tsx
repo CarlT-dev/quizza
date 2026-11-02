@@ -1,5 +1,5 @@
 import { memo, useCallback, useMemo, useState, useRef, useEffect } from 'react';
-import { ChevronDown, Globe, Lock, Users, User, HelpCircle, Target, Brain, List, Check, MoreVertical, Trash2 } from 'lucide-react';
+import { ChevronDown, Edit, Globe, Lock, Users, User, HelpCircle, Target, Brain, List, Check, MoreVertical, Trash2 } from 'lucide-react';
 import { Card } from '@/shared/components/ui';
 import { ColorPalette } from '@/shared/components/ui/ColorPalette';
 import { useCardSwipe } from '../hooks/useCardSwipe';
@@ -10,8 +10,10 @@ interface QuizCardProps {
   currentUserId: string | null | undefined;
   progress: QuizProgress | null;
   colorId: CardColorId;
+  customTitle: string;
   onClick: () => void;
   onColorChange: (colorId: CardColorId) => void;
+  onTitleChange?: (title: string) => void;
   onToggleVisibility?: () => void;
   onDelete?: () => void;
 }
@@ -38,8 +40,10 @@ export const QuizCard = memo(function QuizCard({
   currentUserId,
   progress,
   colorId: initialColorId,
+  customTitle,
   onClick,
   onColorChange,
+  onTitleChange,
   onToggleVisibility,
   onDelete,
 }: QuizCardProps) {
@@ -51,7 +55,10 @@ export const QuizCard = memo(function QuizCard({
   // Card actions menu (⋯) - only for owned quizzes with a handler provided
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
   const canManage = Boolean(isOwner) && (Boolean(onToggleVisibility) || Boolean(onDelete));
+  const canRename = Boolean(currentUserId) && Boolean(onTitleChange);
 
   // Local state for instant UI update, synced with prop initially
   const [localColorId, setLocalColorId] = useState<CardColorId>(initialColorId);
@@ -69,6 +76,9 @@ export const QuizCard = memo(function QuizCard({
       }
     };
   }, []);
+
+  // Ref for outside-click detection on the card palette
+  const cardRef = useRef<HTMLDivElement>(null);
 
   // Debounce timer ref for Firestore save
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -138,6 +148,31 @@ export const QuizCard = memo(function QuizCard({
     };
   }, [isMenuOpen, closeMenu]);
 
+  // Close the color palette on outside click or Escape while it is open.
+  // Uses the card ref so clicks inside the card (e.g. on the Card body which
+  // already calls close() via handleClick) don't double-fire.
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (cardRef.current && !cardRef.current.contains(e.target as Node)) {
+        close();
+      }
+    };
+
+    const handlePaletteEscapeKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close();
+    };
+
+    document.addEventListener('click', handleOutsideClick);
+    document.addEventListener('keydown', handlePaletteEscapeKey);
+
+    return () => {
+      document.removeEventListener('click', handleOutsideClick);
+      document.removeEventListener('keydown', handlePaletteEscapeKey);
+    };
+  }, [isOpen, close]);
+
   // Handle click - close palette/menu if open, otherwise navigate
   const handleClick = useCallback(() => {
     if (isOpen) {
@@ -173,6 +208,20 @@ export const QuizCard = memo(function QuizCard({
 
     close();
   }, [onColorChange, close]);
+
+  // Handle title save - called on Enter or blur when editing
+  const handleTitleSave = useCallback(() => {
+    if (editTitle.trim() && onTitleChange) {
+      onTitleChange(editTitle.trim());
+    }
+    setIsEditingTitle(false);
+  }, [editTitle, onTitleChange]);
+
+  // Handle title cancel - discard changes and exit edit mode
+  const handleTitleCancel = useCallback(() => {
+    setEditTitle(customTitle);
+    setIsEditingTitle(false);
+  }, [customTitle]);
 
   // Determine card background classes
   const cardBgClasses = useMemo(() => {
@@ -244,7 +293,7 @@ export const QuizCard = memo(function QuizCard({
   };
 
   return (
-    <div className="relative overflow-hidden" style={{ touchAction: 'pan-y' }}>
+    <div ref={cardRef} className="relative overflow-hidden" style={{ touchAction: 'pan-y' }}>
       {/* Color Palette - positioned on LEFT side, stationary */}
       <div
         className="absolute top-0 left-0 bottom-0 z-0 flex items-center pl-2 pointer-events-none"
@@ -290,7 +339,7 @@ export const QuizCard = memo(function QuizCard({
           {/* Header with Title & Author - COLORED SECTION */}
           <div className={`${cardBgClasses} ${textClasses} ${borderClasses} border-b p-4 relative`}>
             {/* Card actions: ⋯ menu for owned quizzes */}
-            {canManage && (
+            {(canManage || canRename) && (
               <button
                 type="button"
                 {...menuEventProps}
@@ -314,14 +363,29 @@ export const QuizCard = memo(function QuizCard({
                 <MoreVertical className="w-6 h-6" aria-hidden="true" />
               </button>
             )}
-            {canManage && isMenuOpen && (
+            {(canManage || canRename) && isMenuOpen && (
               <div
                 {...menuEventProps}
                 role="menu"
                 aria-label="Quiz options"
                 className="absolute right-2 top-10 z-20 w-44 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-lg py-1"
               >
-                {onToggleVisibility && !isConfirmingDelete && (
+                {canRename && !isConfirmingDelete && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setEditTitle(customTitle);
+                      setIsEditingTitle(true);
+                      closeMenu();
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    <Edit className="w-4 h-4" aria-hidden="true" />
+                    Rename
+                  </button>
+                )}
+                {canManage && onToggleVisibility && !isConfirmingDelete && (
                   <button
                     type="button"
                     role="menuitem"
@@ -339,7 +403,7 @@ export const QuizCard = memo(function QuizCard({
                     {quiz.visibility === 'public' ? 'Make private' : 'Make public'}
                   </button>
                 )}
-                {onDelete && !isConfirmingDelete && (
+                {canManage && onDelete && !isConfirmingDelete && (
                   <button
                     type="button"
                     role="menuitem"
@@ -378,9 +442,28 @@ export const QuizCard = memo(function QuizCard({
                 )}
               </div>
             )}
-            <div className={`space-y-1 ${canManage ? 'pr-8' : ''}`}>
+            <div className={`space-y-1 ${(canManage || canRename) ? 'pr-8' : ''}`}>
               <h3 className={`text-2xl font-semibold truncate`}>
-                {quiz.title}
+                {isEditingTitle ? (
+                  <input
+                    autoFocus
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    onBlur={handleTitleSave}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleTitleSave();
+                      }
+                      if (e.key === 'Escape') {
+                        handleTitleCancel();
+                      }
+                    }}
+                    className="inherit text-2xl font-semibold border-b border-transparent focus:border-gray-300 dark:focus:border-gray-600 bg-transparent focus:outline-none w-full"
+                  />
+                ) : (
+                  customTitle
+                )}
                 <div>
                   <span className='text-[20px] font-light'>
                     {quiz.metadata.totalQuestions} Questions

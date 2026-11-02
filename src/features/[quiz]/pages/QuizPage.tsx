@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronsLeft, ChevronsRight, Play, Loader2, AlertTriangle } from 'lucide-react';
-import { Card } from '@/shared/components';
+import { ChevronLeft, ChevronsLeft, ChevronsRight, Play, Loader2, AlertTriangle, RotateCcw, History } from 'lucide-react';
 import { getQuizById, saveQuizProgress, getQuizProgress } from '@/features/quiz';
 import { useAuth } from '@/features/auth';
 import type { QuizDocument, QuizProgress } from '@/features/quiz/api/quiz';
@@ -109,12 +108,18 @@ export function QuizPage() {
   // loses that delta until the next write or submit.
   useEffect(() => {
     if (view !== 'quiz' || !quizData || !user || !quizId || answeredCount === 0) return;
-    const timer = setTimeout(() => {
-      saveQuizProgress(quizId, user.uid, {
+    const timer = setTimeout(async () => {
+      await saveQuizProgress(quizId, user.uid, {
         answeredCount,
         totalQuestions,
         completed: false,
-      }).catch(err => console.error('Failed to save progress:', err));
+      });
+      try {
+        const progress = await getQuizProgress(quizId, user.uid);
+        setSavedProgress(progress ?? null);
+      } catch (err) {
+        console.error('Failed to refresh progress after save:', err);
+      }
     }, 800);
     return () => clearTimeout(timer);
   }, [view, quizData, user, answeredCount, totalQuestions, quizId]);
@@ -161,7 +166,37 @@ export function QuizPage() {
     setView('quiz');
   };
 
-  const handleBackToStart = () => {
+  const handleRetake = () => {
+    setAnswers(new Map());
+    setCurrentIndex(0);
+    setView('quiz');
+    initRef.current = false;
+  };
+
+  const handleBackToStart = async () => {
+    // Flush any in-flight answered-count progress to Firestore before leaving
+    // the quiz view, so the start page and quizzes list reflect the latest state.
+    if (user && quizData && quizId && answeredCount > 0) {
+      try {
+        await saveQuizProgress(quizId, user.uid, {
+          answeredCount,
+          totalQuestions,
+          completed: false,
+        });
+      } catch (err) {
+        console.error('Failed to save progress before returning to start:', err);
+      }
+    }
+    // Refresh savedProgress from Firestore so the start page shows current
+    // retake progress instead of the stale completed state.
+    if (user && quizId) {
+      try {
+        const progress = await getQuizProgress(quizId, user.uid);
+        setSavedProgress(progress ?? null);
+      } catch (err) {
+        console.error('Failed to refresh progress on return to start:', err);
+      }
+    }
     setView('start');
   };
 
@@ -180,7 +215,18 @@ export function QuizPage() {
         <div className="flex-1 text-center">
           <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Quiz Overview</h1>
         </div>
-        <div className="w-10" />
+        {savedProgress?.completed ? (
+          <button
+            type="button"
+            onClick={() => navigate(`/quiz/${quizId}/result`)}
+            className="p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+            aria-label="View results"
+          >
+            <History className="w-6 h-6" aria-hidden="true" />
+          </button>
+        ) : (
+          <div className="w-10" />
+        )}
       </header>
     );
 
@@ -229,7 +275,14 @@ export function QuizPage() {
           <div className="flex-1 text-center">
             <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Quiz Overview</h1>
           </div>
-          <div className="w-10" />
+          <button
+            type="button"
+            onClick={() => navigate(`/quiz/${quizId}/result`)}
+            className="p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+            aria-label="View results"
+          >
+            <History className="w-6 h-6" aria-hidden="true" />
+          </button>
         </header>
 
         {/* Content */}
@@ -271,17 +324,27 @@ export function QuizPage() {
               </div>
 
 
-              {/* Start/Continue Button */}
-              <button
-                onClick={handleStartQuiz}
-                className="w-full py-4 px-6 bg-primary-500 text-white font-semibold rounded-xl hover:bg-primary-600 transition-colors text-lg flex items-center justify-center gap-2"
-                disabled={currentIndex >= totalQuestions}
-              >
-                <Play className="w-5 h-5" aria-hidden="true" />
-                {currentIndex === 0 ? 'Start Quiz' : 'Continue'}
-              </button>
+              {/* Start/Continue / Retake Button */}
+              {savedProgress?.completed ? (
+                <button
+                  onClick={handleRetake}
+                  className="w-full py-4 px-6 bg-primary-500 text-white font-semibold rounded-xl hover:bg-primary-600 transition-colors text-lg flex items-center justify-center gap-2"
+                >
+                  <RotateCcw className="w-5 h-5" aria-hidden="true" />
+                  <span>Retake</span>
+                </button>
+              ) : (
+                <button
+                  onClick={handleStartQuiz}
+                  className="w-full py-4 px-6 bg-primary-500 text-white font-semibold rounded-xl hover:bg-primary-600 transition-colors text-lg flex items-center justify-center gap-2"
+                  disabled={currentIndex >= totalQuestions}
+                >
+                  <Play className="w-5 h-5" aria-hidden="true" />
+                  {currentIndex === 0 ? 'Start Quiz' : 'Continue'}
+                </button>
+              )}
 
-              {currentIndex > 0 && (
+              {currentIndex > 0 && !savedProgress?.completed && (
                 <p className="text-center text-xs text-gray-500 dark:text-gray-400">
                   Click Continue to resume from question {currentIndex + 1}
                 </p>
@@ -359,23 +422,21 @@ export function QuizPage() {
 
       {/* Question Content */}
       <main className="flex-1 flex flex-col pb-24 px-4 max-w-[500px] mx-auto w-full mb-30">
-        <div className="flex-1 flex flex-col justify-center">
-          {/* Question Card */}
-          <Card className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 space-y-6">
-            {/* Question Number & Type Badge */}
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <span className="text-sm font-medium text-primary-600 dark:text-primary-400">
+        <div className="flex-1 flex flex-col">
+          {/* Question Number & Type Badge */}
+            <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+              <span className="text-xs font-medium text-primary-600 dark:text-primary-400">
                 Question {currentIndex + 1}
               </span>
             </div>
 
             {/* Question Text */}
-            <p className="text-xl font-medium text-gray-900 dark:text-gray-100 leading-relaxed">
+            <p className="text-lg font-medium text-gray-900 dark:text-gray-100 leading-relaxed">
               {currentQuestion.question}
             </p>
 
             {/* Answer Input based on question type */}
-            <div className="space-y-3">
+            <div className="space-y-3 mt-8">
               {(() => {
                 switch (currentQuestion.type) {
                   case 'multiple_choice':
@@ -384,6 +445,7 @@ export function QuizPage() {
                       <>
                         {currentQuestion.options.map((option, optionIndex) => {
                           const isSelected = selectedAnswer === optionIndex;
+                          const letter = String.fromCharCode(65 + optionIndex);
                           return (
                             <button
                               key={optionIndex}
@@ -399,7 +461,10 @@ export function QuizPage() {
                               aria-pressed={isSelected}
                             >
                               <div className="flex items-center gap-3">
-                                <span className="flex-1 text-gray-900 dark:text-gray-100 text-base">
+                                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${isSelected ? 'bg-primary-500 text-primary-100 dark:bg-primary-900 dark:text-primary-300' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}>
+                                  {letter}
+                                </span>
+                                <span className="flex-1 text-gray-900 dark:text-gray-100 text-sm">
                                   {option}
                                 </span>
                                 {isSelected && (
@@ -458,7 +523,6 @@ export function QuizPage() {
                 }
               })()}
             </div>
-          </Card>
         </div>
 
         {/* Navigation Footer - Sticky Bottom */}

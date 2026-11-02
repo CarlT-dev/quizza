@@ -51,7 +51,7 @@ function calculateScore(questions: QuizQuestion[], answers: AnswerMap): { correc
       case 'enumeration': {
         correctAnswer = question.correctAnswers || [];
         if (Array.isArray(userAnswer) && userAnswer.some(a => a.trim().length > 0)) {
-          const result = checkEnumerationAnswer(userAnswer, question.correctAnswers || [], question.minCorrect);
+          const result = checkEnumerationAnswer(userAnswer, question.correctAnswers || [], question.minCorrect, question.enumerationOrdered ?? false);
           isCorrect = result.passed;
           if (isCorrect) correct++;
         }
@@ -120,6 +120,8 @@ export function ScorePage() {
               totalQuestions: quiz.questions.length,
               completed: true,
               score: { correct: score.correct, total: score.total },
+              answers: state.answers,
+              details: score.details,
             }).catch(err => console.error('Failed to save progress:', err));
           }
         } else {

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth';
-import { getUserQuizzes, getUserQuizCount, getPublicQuizzes, updateQuizVisibility, deleteQuiz, type QuizDocument } from '@/features/quiz';
+import { getUserQuizzes, getUserQuizCount, getPublicQuizzes, updateQuizVisibility, deleteQuiz, saveQuizTitle, type QuizDocument } from '@/features/quiz';
 import { useQuizProgress } from '@/features/quiz/hooks/useQuizProgress';
 import { saveQuizColorPreference, type CardColorId } from '@/features/quiz/api/quiz';
 import { QuizCard } from '../components/QuizCard';
@@ -97,7 +97,7 @@ export function QuizzesPage() {
   );
 
   // Fetch progress and color preferences
-  const { progressMap, colorPrefsMap, refetch: refetchProgress, updateColorPref, isLoading: progressLoading } = useQuizProgress({
+  const { progressMap, colorPrefsMap, titlePrefsMap, refetch: refetchProgress, updateColorPref, updateTitle, isLoading: progressLoading } = useQuizProgress({
     quizIds,
     userId: user?.uid,
     enabled: !!user && quizIds.length > 0,
@@ -141,6 +141,22 @@ export function QuizzesPage() {
       refetchProgress();
     }
   }, [user, refetchProgress, updateColorPref]);
+
+  // Handle title change (rename) - optimistic update with rollback on failure
+  const handleTitleChange = useCallback(async (quizId: string, newTitle: string) => {
+    if (!user) return;
+
+    // Optimistic update
+    updateTitle(quizId, newTitle);
+
+    try {
+      await saveQuizTitle(quizId, user.uid, newTitle);
+    } catch (err) {
+      console.error('Failed to save quiz title:', err);
+      // Rollback on error
+      refetchProgress();
+    }
+  }, [user, refetchProgress, updateTitle]);
 
   // Quiz management: optimistic update with rollback on failure
   const handleToggleVisibility = useCallback(async (quizId: string) => {
@@ -369,6 +385,7 @@ export function QuizzesPage() {
     list.map((quiz) => {
       const progress = quiz.id ? progressMap.get(quiz.id) || null : null;
       const colorId = quiz.id ? colorPrefsMap.get(quiz.id) || 'default' : 'default';
+      const customTitle = quiz.id ? titlePrefsMap.get(quiz.id) || quiz.title : quiz.title;
 
       return (
         <QuizCard
@@ -377,8 +394,10 @@ export function QuizzesPage() {
           currentUserId={user?.uid}
           progress={progress}
           colorId={colorId}
+          customTitle={customTitle}
           onClick={() => handleQuizClick(quiz.id!)}
           onColorChange={(newColorId) => handleColorChange(quiz.id!, newColorId)}
+          onTitleChange={(newTitle) => handleTitleChange(quiz.id!, newTitle)}
           onToggleVisibility={() => handleToggleVisibility(quiz.id!)}
           onDelete={() => handleDeleteQuiz(quiz.id!)}
         />

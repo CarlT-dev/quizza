@@ -20,6 +20,8 @@ export interface QuizQuestion {
   correctAnswers?: string[];
   /** Minimum correct items for partial credit (for enumeration) */
   minCorrect?: number;
+  /** Whether enumeration answers must be in order (true) or can be any order (false). Optional — only set true when order matters. Defaults to false (unordered) when absent. */
+  enumerationOrdered?: boolean;
   /** Explanation for the correct answer */
   explanation: string;
   /** Question difficulty */
@@ -31,6 +33,8 @@ export interface QuizQuestion {
 export interface QuizMetadata {
   /** Topic the quiz was generated from */
   topic: string;
+  /** AI-generated title for the quiz */
+  title?: string;
   /** Total number of questions */
   totalQuestions: number;
   /** Question types used (can be multiple) - NEW */
@@ -67,6 +71,7 @@ export function validateQuizResponse(data: unknown): data is QuizResponse {
 
   const metadata = response.metadata as Record<string, unknown>;
   if (typeof metadata.topic !== 'string') return false;
+  if (metadata.title !== undefined && (typeof metadata.title !== 'string' || metadata.title.trim().length === 0)) return false;
   if (typeof metadata.totalQuestions !== 'number') return false;
   // Accept new array format OR old single-value format
   const hasQuestionTypes = Array.isArray(metadata.questionTypes) && metadata.questionTypes.length > 0;
@@ -135,6 +140,7 @@ function validateQuizQuestion(question: unknown): question is QuizQuestion {
       if (typeof ans !== 'string' || ans.trim().length === 0) return false;
     }
     if (q.minCorrect !== undefined && (typeof q.minCorrect !== 'number' || q.minCorrect < 1)) return false;
+    if (q.enumerationOrdered !== undefined && typeof q.enumerationOrdered !== 'boolean') return false;
     // Options can be empty or contain hints
   }
 
@@ -160,15 +166,34 @@ export function checkIdentificationAnswer(userAnswer: string, correctAnswer: str
 /**
  * Case-insensitive answer comparison for enumeration questions
  * Returns { correct: number, total: number, passed: boolean }
+ * When ordered is true, answers must match by position. When false (default),
+ * order does not matter — each correct answer is counted if it appears anywhere
+ * in the user's answers.
  */
-export function checkEnumerationAnswer(userAnswers: string[], correctAnswers: string[], minCorrect?: number): { correct: number; total: number; passed: boolean } {
+export function checkEnumerationAnswer(
+  userAnswers: string[],
+  correctAnswers: string[],
+  minCorrect?: number,
+  ordered: boolean = false
+): { correct: number; total: number; passed: boolean } {
   const normalizedUser = userAnswers.map(a => a.trim().toLowerCase());
   const normalizedCorrect = correctAnswers.map(a => a.trim().toLowerCase());
 
   let correct = 0;
-  for (let i = 0; i < normalizedCorrect.length; i++) {
-    if (normalizedUser[i] === normalizedCorrect[i]) {
-      correct++;
+  if (ordered) {
+    // Positional comparison — answers must match by index
+    for (let i = 0; i < normalizedCorrect.length; i++) {
+      if (normalizedUser[i] === normalizedCorrect[i]) {
+        correct++;
+      }
+    }
+  } else {
+    // Set-based matching — order does not matter
+    const userSet = new Set(normalizedUser.filter(a => a.length > 0));
+    for (const ans of normalizedCorrect) {
+      if (userSet.has(ans)) {
+        correct++;
+      }
     }
   }
 
