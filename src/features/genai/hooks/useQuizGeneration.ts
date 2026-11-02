@@ -7,7 +7,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { QuizRequest, QuizResponse } from '../schema';
-import { generateQuiz, cancelActiveGeneration, type GenerationResult } from '../services/gemini.service';
+import { generateQuiz, cancelActiveGeneration, type GenerationResult } from '../services/ai-providers.service';
 
 export interface UseQuizGenerationReturn {
   /** Current generation state */

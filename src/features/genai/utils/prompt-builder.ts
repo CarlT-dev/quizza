@@ -14,8 +14,9 @@ RULES:
 5. True/False: exactly 2 options ("True","False")
 6. Multiple Choice: exactly 4 options (A,B,C,D)
 7. Identification: question with blank, correct answer + 2-3 alternatives
-8. Enumeration: ordered list (if sequence implied) or unordered set
-9. All matching: CASE-INSENSITIVE`;
+8. Enumeration: ordered list (if sequence implied) or unordered set; set enumerationOrdered=true for ordered, false for unordered
+9. Title: generate a concise, descriptive quiz title based on the topic
+10. All matching: CASE-INSENSITIVE`;
 }
 
 /**
@@ -28,7 +29,7 @@ export function buildUserPrompt(request: QuizRequest): string {
     multiple_choice: 'Multiple Choice (4 options A,B,C,D)',
     true_false: 'True/False (2 options)',
     identification: 'Identification (fill-in-blank with answer + alternatives)',
-    enumeration: 'Enumeration (ordered/unordered list)',
+    enumeration: 'Enumeration (ordered if sequence implied, unordered if a set; set enumerationOrdered accordingly)',
   };
 
   const diffMap: Record<string, string> = {
@@ -62,7 +63,7 @@ OUTPUT (JSON only):
   "questions": [
     {"id":"q1","question":"...","options":[],"correctAnswerIndex":0,"explanation":"...","difficulty":"easy|medium|hard","type":"multiple_choice|true_false|identification|enumeration"}
   ],
-  "metadata":{"topic":"${topic}","totalQuestions":${itemCount},"questionTypes":${JSON.stringify(questionTypes)},"difficulties":${JSON.stringify(difficulties)},"generatedAt":"${new Date().toISOString()}","model":"auto"}
+  "metadata":{"title":"...","topic":"${topic}","totalQuestions":${itemCount},"questionTypes":${JSON.stringify(questionTypes)},"difficulties":${JSON.stringify(difficulties)},"generatedAt":"${new Date().toISOString()}","model":"auto"}
 }
 
 IMPORTANT: Mix question types and difficulties as specified. Each question must have its own type and difficulty. Unique questions covering different aspects.`;
@@ -76,7 +77,7 @@ export function buildFewShotExamples(): string {
 Multiple Choice: {"id":"q1","question":"Capital of France?","options":["London","Paris","Berlin","Madrid"],"correctAnswerIndex":1,"explanation":"Paris is France's capital.","difficulty":"easy","type":"multiple_choice"}
 True/False: {"id":"q1","question":"Earth is 3rd from Sun.","options":["True","False"],"correctAnswerIndex":0,"explanation":"Earth orbits 3rd.","difficulty":"easy","type":"true_false"}
 Identification: {"id":"q1","question":"Capital of Japan is _____.","options":[],"correctAnswer":"Tokyo","acceptableAnswers":["Tōkyō","Tokio"],"explanation":"Since 1868.","difficulty":"easy","type":"identification"}
-Enumeration: {"id":"q1","question":"First 3 planets from Sun.","options":[],"correctAnswers":["Mercury","Venus","Earth"],"explanation":"Inner planets in order.","difficulty":"easy","type":"enumeration"}`;
+Enumeration: {"id":"q1","question":"First 3 planets from Sun.","options":[],"correctAnswers":["Mercury","Venus","Earth"],"enumerationOrdered":true,"explanation":"Inner planets in order.","difficulty":"easy","type":"enumeration"}`;
 }
 
 /**

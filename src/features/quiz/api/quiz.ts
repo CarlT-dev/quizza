@@ -41,12 +41,27 @@ export interface QuizProgress {
     correct: number;
     total: number;
   };
+  answers?: Record<string, number | string | string[]>;
+  details?: Array<{
+    questionId: string;
+    isCorrect: boolean;
+    userAnswer: number | string | string[];
+    correctAnswer: number | string | string[];
+    explanation: string;
+  }>;
 }
 
 export interface QuizColorPreference {
   userId: string;
   quizId: string;
   colorId: string;
+  updatedAt: Timestamp;
+}
+
+export interface QuizTitle {
+  userId: string;
+  quizId: string;
+  title: string;
   updatedAt: Timestamp;
 }
 
@@ -78,7 +93,7 @@ export async function saveQuiz(
   visibility: 'public' | 'private'
 ): Promise<string> {
   const quizDoc: Omit<QuizDocument, 'id'> = {
-    title: quizData.metadata.topic,
+    title: quizData.metadata.title ?? quizData.metadata.topic,
     topic: quizData.metadata.topic,
     questions: quizData.questions,
     metadata: quizData.metadata,
@@ -122,6 +137,7 @@ export async function deleteQuiz(quizId: string, userId: string): Promise<void> 
   const cleanups = await Promise.allSettled([
     deleteDoc(doc(db, 'quizAttempts', `${userId}_${quizId}`)),
     deleteDoc(doc(db, 'quizPreferences', `${userId}_${quizId}`)),
+    deleteDoc(doc(db, 'quizTitles', `${userId}_${quizId}`)),
   ]);
   cleanups.forEach(result => {
     if (result.status === 'rejected') {
@@ -278,6 +294,75 @@ export async function saveQuizColorPreference(quizId: string, userId: string, co
     colorId,
     updatedAt: serverTimestamp(),
   });
+}
+
+/**
+ * Saves a user's custom title for a quiz.
+ * Stored in a user-scoped side document so each user can have their own
+ * display title for a quiz without changing the shared quiz title.
+ */
+export async function saveQuizTitle(
+  quizId: string,
+  userId: string,
+  title: string
+): Promise<void> {
+  const titleRef = doc(db, 'quizTitles', `${userId}_${quizId}`);
+  await setDoc(titleRef, {
+    userId,
+    quizId,
+    title,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/**
+ * Gets a user's custom title for a quiz.
+ * Returns null when the user has no custom title for this quiz.
+ */
+export async function getQuizTitle(
+  quizId: string,
+  userId: string
+): Promise<string | null> {
+  const titleRef = doc(db, 'quizTitles', `${userId}_${quizId}`);
+  const docSnap = await getDoc(titleRef);
+
+  if (!docSnap.exists()) {
+    return null;
+  }
+
+  const data = docSnap.data() as QuizTitle;
+  return data.title;
+}
+
+/**
+ * Gets custom titles for multiple quizzes at once.
+ * Returns a Map keyed by quizId with the user's custom title for each.
+ */
+export async function getQuizzesTitles(
+  quizIds: string[],
+  userId: string
+): Promise<Map<string, string>> {
+  const titlesMap = new Map<string, string>();
+
+  if (quizIds.length === 0) return titlesMap;
+
+  // Fetch in batches of 10 (Firestore 'in' query limit)
+  for (let i = 0; i < quizIds.length; i += 10) {
+    const batch = quizIds.slice(i, i + 10);
+    const q = query(
+      collection(db, 'quizTitles'),
+      where('userId', '==', userId),
+      where('quizId', 'in', batch)
+    );
+
+    const querySnapshot = await getDocs(q);
+    querySnapshot.docs.forEach((doc) => {
+      const data = doc.data() as QuizTitle;
+      titlesMap.set(data.quizId, data.title);
+    });
+  }
+
+  return titlesMap;
 }
 
 /**

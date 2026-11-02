@@ -3,10 +3,10 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { AlertTriangle, Check, ChevronLeft, Home, RotateCcw, X } from 'lucide-react';
 import { Button } from '@/shared/components/ui';
 import { useAuth } from '@/features/auth/context/AuthContext';
-import { getQuizById } from '@/features/quiz';
-import type { QuizDocument } from '@/features/quiz/api/quiz';
+import { getQuizById, getQuizProgress } from '@/features/quiz';
+import type { QuizDocument, QuizProgress } from '@/features/quiz/api/quiz';
 import type { QuizQuestion } from '@/features/genai/schema';
-import { checkEnumerationAnswer } from '@/features/genai/schema/quiz-response';
+import { checkEnumerationAnswer, checkIdentificationAnswer } from '@/features/genai/schema/quiz-response';
 
 // Answer value stored per question id (mirrors QuizPage's answer map values)
 type AnswerValue = number | string | string[];
@@ -49,6 +49,52 @@ const TYPE_LABELS: Record<QuizQuestion['type'], string> = {
   enumeration: 'Enumeration',
 };
 
+/**
+ * Reconstructs the correct answer value for a question, mirroring ScorePage's
+ * calculateScore() so that review items can be rebuilt when persisted details
+ * are unavailable (e.g. attempts saved before details were included).
+ */
+function getCorrectAnswer(question: QuizQuestion): AnswerValue {
+  switch (question.type) {
+    case 'multiple_choice':
+    case 'true_false':
+      return question.correctAnswerIndex ?? -1;
+    case 'identification':
+      return question.correctAnswer || '';
+    case 'enumeration':
+      return question.correctAnswers || [];
+    default:
+      return '';
+  }
+}
+
+/**
+ * Determines whether a user's answer is correct for a given question, mirroring
+ * ScorePage's calculateScore() logic.
+ */
+function computeIsCorrect(question: QuizQuestion, userAnswer: AnswerValue | undefined): boolean {
+  if (userAnswer === undefined) return false;
+
+  switch (question.type) {
+    case 'multiple_choice':
+    case 'true_false': {
+      const correctIndex = question.correctAnswerIndex ?? -1;
+      return typeof userAnswer === 'number' && userAnswer === correctIndex;
+    }
+    case 'identification': {
+      if (typeof userAnswer !== 'string' || userAnswer.trim().length === 0) return false;
+      return checkIdentificationAnswer(userAnswer, question.correctAnswer || '', question.acceptableAnswers);
+    }
+    case 'enumeration': {
+      if (!Array.isArray(userAnswer) || userAnswer.some(a => typeof a !== 'string' || a.trim().length === 0)) return false;
+      const result = checkEnumerationAnswer(userAnswer, question.correctAnswers || [], question.minCorrect, question.enumerationOrdered ?? false);
+      return result.passed;
+    }
+    default:
+      return false;
+  }
+}
+
 // Shared green/red families (same palette ScorePage uses for pass/fail)
 const GREEN_ROW = 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20';
 const RED_ROW = 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20';
@@ -68,8 +114,32 @@ export function ResultPage() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<ReviewFilter>('all');
   const [barWidth, setBarWidth] = useState(0);
+  const [attempt, setAttempt] = useState<QuizProgress | null>(null);
 
-  const score = state?.score ?? null;
+  const score = state?.score ?? attempt?.score ?? null;
+
+  // Fetch saved attempt from Firestore when there's no location state score
+  // (e.g., direct page refresh or deep link to /quiz/:quiz/result)
+  useEffect(() => {
+    if (!quizId || !user || state?.score) return;
+
+    let cancelled = false;
+
+    const fetchAttempt = async () => {
+      try {
+        const attemptData = await getQuizProgress(quizId, user.uid);
+        if (!cancelled) setAttempt(attemptData);
+      } catch (err) {
+        console.error('Failed to fetch saved attempt:', err);
+      }
+    };
+
+    fetchAttempt();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [quizId, user, state?.score]);
 
   // Fetch the quiz doc so review rows can show question text, options and type.
   // Skipped entirely when there is no score (direct refresh): the !score guard
@@ -129,14 +199,35 @@ export function ResultPage() {
     [quizData]
   );
 
-  const reviewItems = useMemo<ReviewItem[]>(
-    () => (score?.details ?? []).map((detail, index) => ({
-      detail,
-      question: questionById.get(detail.questionId),
-      index,
-    })),
-    [score, questionById]
-  );
+  const reviewItems = useMemo<ReviewItem[]>(() => {
+    const details = state?.score?.details ?? attempt?.details;
+    if (details) {
+      return details.map((detail, index) => ({
+        detail,
+        question: questionById.get(detail.questionId),
+        index,
+      }));
+    }
+    // Reconstruct from quiz questions and attempt answers when details are unavailable
+    // (e.g. attempts saved before details were persisted, or direct page refresh
+    // without location state). Uses quizData + attempt.answers as the fallback source.
+    if (quizData && attempt) {
+      const answers = attempt.answers;
+      if (!answers) return [];
+      return quizData.questions.map((q, index) => ({
+        detail: {
+          questionId: q.id,
+          isCorrect: computeIsCorrect(q, answers[q.id]),
+          userAnswer: answers[q.id] ?? '',
+          correctAnswer: getCorrectAnswer(q),
+          explanation: q.explanation,
+        },
+        question: q,
+        index,
+      }));
+    }
+    return [];
+  }, [questionById, state?.score?.details, quizData, attempt]);
 
   // Details whose question no longer exists (quiz edited since the attempt) are not renderable
   const renderableItems = useMemo(() => reviewItems.filter(item => item.question), [reviewItems]);
@@ -430,18 +521,51 @@ export function ResultPage() {
                               // and can contain holes when only some items were filled in
                               const items = Array.isArray(detail.userAnswer) ? detail.userAnswer : [];
                               const keyList = question.correctAnswers ?? (Array.isArray(detail.correctAnswer) ? detail.correctAnswer : []);
-                              const result = keyList.length > 0 ? checkEnumerationAnswer(items, keyList, question.minCorrect) : null;
+                              const result = keyList.length > 0 ? checkEnumerationAnswer(items, keyList, question.minCorrect, question.enumerationOrdered ?? false) : null;
 
                               return (
                                 <div className="space-y-2">
                                   <ul className="space-y-2">
                                     {keyList.map((correctItem, itemIndex) => {
-                                      const userItem = typeof items[itemIndex] === 'string' ? items[itemIndex] : '';
-                                      const isBlank = userItem.trim().length === 0;
-                                      const isMatch = !isBlank && userItem.trim().toLowerCase() === correctItem.trim().toLowerCase();
+                                      const normalizedCorrect = correctItem.trim().toLowerCase();
+                                      const isOrdered = question.enumerationOrdered === true;
+
+                                      if (isOrdered) {
+                                        // Positional display — user's answer at this position vs correct answer at this position
+                                        const userItem = typeof items[itemIndex] === 'string' ? items[itemIndex] : '';
+                                        const isBlank = userItem.trim().length === 0;
+                                        const isMatch = !isBlank && userItem.trim().toLowerCase() === normalizedCorrect;
+
+                                        return (
+                                          <li key={itemIndex} className={`p-3 rounded-xl border ${isMatch ? GREEN_ROW : isBlank ? PLAIN_ROW : RED_ROW}`}>
+                                            <div className="flex items-center justify-between gap-2">
+                                              <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">
+                                                Item {itemIndex + 1}
+                                              </span>
+                                              {isMatch ? (
+                                                <Check className={`w-4 h-4 shrink-0 ${GREEN_ICON}`} aria-hidden="true" />
+                                              ) : (
+                                                <X className={`w-4 h-4 shrink-0 ${isBlank ? 'text-gray-400 dark:text-gray-500' : RED_ICON}`} aria-hidden="true" />
+                                              )}
+                                            </div>
+                                            <p className={`text-sm ${isBlank ? 'text-gray-400 dark:text-gray-500 italic' : 'font-medium text-gray-900 dark:text-gray-100'}`}>
+                                              {isBlank ? 'Not answered' : userItem}
+                                            </p>
+                                            {!isMatch && !isBlank && (
+                                              <p className="mt-1 text-xs text-green-700 dark:text-green-300">
+                                                Correct: {correctItem}
+                                              </p>
+                                            )}
+                                          </li>
+                                        );
+                                      }
+
+                                      // Unordered display — set-based membership, position doesn't matter
+                                      const userSet = new Set(items.map(a => a.trim().toLowerCase()).filter(a => a.length > 0));
+                                      const isMatch = userSet.has(normalizedCorrect);
 
                                       return (
-                                        <li key={itemIndex} className={`p-3 rounded-xl border ${isMatch ? GREEN_ROW : isBlank ? PLAIN_ROW : RED_ROW}`}>
+                                        <li key={itemIndex} className={`p-3 rounded-xl border ${isMatch ? GREEN_ROW : RED_ROW}`}>
                                           <div className="flex items-center justify-between gap-2">
                                             <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">
                                               Item {itemIndex + 1}
@@ -449,15 +573,15 @@ export function ResultPage() {
                                             {isMatch ? (
                                               <Check className={`w-4 h-4 shrink-0 ${GREEN_ICON}`} aria-hidden="true" />
                                             ) : (
-                                              <X className={`w-4 h-4 shrink-0 ${isBlank ? 'text-gray-400 dark:text-gray-500' : RED_ICON}`} aria-hidden="true" />
+                                              <X className={`w-4 h-4 shrink-0 ${RED_ICON}`} aria-hidden="true" />
                                             )}
                                           </div>
-                                          <p className={`text-sm ${isBlank ? 'text-gray-400 dark:text-gray-500 italic' : 'font-medium text-gray-900 dark:text-gray-100'}`}>
-                                            {isBlank ? 'Not answered' : userItem}
+                                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                            {correctItem}
                                           </p>
                                           {!isMatch && (
-                                            <p className="mt-1 text-xs text-green-700 dark:text-green-300">
-                                              Correct: {correctItem}
+                                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                              Not included in your answers
                                             </p>
                                           )}
                                         </li>
