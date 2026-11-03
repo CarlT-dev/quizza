@@ -92,7 +92,7 @@ export function StatusPage() {
   );
 
   return (
-    <div className="min-h-screen bg-primary-50/30 dark:bg-gray-900">
+    <div className="flex-1 bg-primary-50/30 dark:bg-gray-900">
       <header className="px-4 py-3 mb-4 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
         <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Status</h1>
       </header>

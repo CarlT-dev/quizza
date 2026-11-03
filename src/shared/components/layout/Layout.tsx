@@ -20,9 +20,9 @@ export function Layout({
   minHeight = true,
 }: LayoutProps) {
   return (
-    <div className="min-h-screen bg-primary-50/10 dark:bg-gray-900">
+    <div className="min-h-dvh bg-primary-50/10 dark:bg-gray-900">
       <main
-        className={`relative w-full max-w-[500px] mx-auto overflow-x-hidden bg-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] dark:bg-gray-900 ${minHeight ? 'min-h-screen' : 'min-h-[calc(100vh-env(safe-area-inset-top)-env(safe-area-inset-bottom))]'}`}
+        className={`relative flex w-full flex-col max-w-[500px] mx-auto overflow-x-hidden bg-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] dark:bg-gray-900 ${minHeight ? 'min-h-dvh' : 'min-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom))]'}`}
       >
         {/* Status bar safe area */}
         <div className="absolute inset-x-0 top-0 h-[env(safe-area-inset-top)] bg-white dark:bg-gray-900" />
@@ -36,7 +36,7 @@ export function Layout({
         )}
 
         {/* App content - wrapped in PageTransition for slide transitions */}
-        <PageTransition className='bg-inherit dark:bg-gray-900 flex-1 min-h-0'>{children}</PageTransition>
+        <PageTransition className='bg-inherit dark:bg-gray-900 flex-1 min-h-0 flex flex-col'>{children}</PageTransition>
 
         {/* FooterNav - OUTSIDE AnimatePage so it stays visible during transitions */}
         {showFooterNav && (

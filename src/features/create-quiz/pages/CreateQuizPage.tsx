@@ -514,7 +514,7 @@ export function CreateQuizPage() {
   };
 
   return (
-    <div className="min-h-screen bg-primary-50/30 dark:bg-gray-900">
+    <div className="flex-1 bg-primary-50/30 dark:bg-gray-900">
       {/* Gradient Header with rounded bottom corners - fixed but constrained to layout width */}
       <header className="inset-x-0 top-0 z-10 max-w-[500px] mx-auto bg-gradient-to-r from-primary-500 to-primary-600 rounded-b-3xl px-4 pb-4">
         {/* Back button */}
