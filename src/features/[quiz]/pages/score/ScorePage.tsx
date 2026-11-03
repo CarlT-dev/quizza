@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ChevronLeft, Award, ArrowRight, Home, AlertTriangle, Sparkles } from 'lucide-react';
 import { Card, CardContent } from '@/shared/components/ui';
-import { getQuizById, saveQuizProgress } from '@/features/quiz';
+import { getQuizById, saveQuizProgress, recordFirstCompletion, updateUserStatsFromAttempts } from '@/features/quiz';
 import { useAuth } from '@/features/auth';
 import type { QuizDocument } from '@/features/quiz/api/quiz';
 import type { QuizQuestion } from '@/features/genai/schema';
@@ -115,14 +115,34 @@ export function ScorePage() {
           // point (the !state?.answers guard above routes them to the error card),
           // and StrictMode's double-run is idempotent (merge with identical payload).
           if (user) {
-            saveQuizProgress(quizId, user.uid, {
+            const firstScore = { correct: score.correct, total: score.total };
+            const progressPayload = {
               answeredCount: quiz.questions.length,
               totalQuestions: quiz.questions.length,
               completed: true,
-              score: { correct: score.correct, total: score.total },
+              score: firstScore,
               answers: state.answers,
               details: score.details,
-            }).catch(err => console.error('Failed to save progress:', err));
+            };
+
+            // Capture the first-take score in a transaction BEFORE the completed
+            // save merges completed:true — once that lands, retakes and legacy
+            // docs would be indistinguishable. The progress save must survive a
+            // stats-layer failure, hence the fallback in the catch.
+            recordFirstCompletion(quizId, user.uid, firstScore)
+              .then(isFirst => {
+                saveQuizProgress(quizId, user.uid, progressPayload)
+                  .catch(err => console.error('Failed to save progress:', err));
+                if (isFirst) {
+                  updateUserStatsFromAttempts(user.uid)
+                    .catch(err => console.error('Failed to update user stats:', err));
+                }
+              })
+              .catch(err => {
+                console.error('Failed to record first completion:', err);
+                saveQuizProgress(quizId, user.uid, progressPayload)
+                  .catch(saveErr => console.error('Failed to save progress:', saveErr));
+              });
           }
         } else {
           setError('Quiz not found');

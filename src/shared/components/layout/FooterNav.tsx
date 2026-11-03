@@ -1,6 +1,6 @@
 import { useLocation } from 'react-router-dom';
 import { Link } from 'react-router-dom';
-import { Home, BookOpen, PlusCircle, User, Settings } from 'lucide-react';
+import { Home, Search, BookOpen, BarChart3 } from 'lucide-react';
 
 interface NavItem {
   path: string;
@@ -10,10 +10,9 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { path: '/', icon: Home, label: 'Home' },
+  { path: '/search', icon: Search, label: 'Search' },
   { path: '/quizzes', icon: BookOpen, label: 'Quizzes' },
-  { path: '/create-quiz', icon: PlusCircle, label: 'Create' },
-  { path: '/profile', icon: User, label: 'Profile' },
-  { path: '/settings', icon: Settings, label: 'Settings' },
+  { path: '/status', icon: BarChart3, label: 'Status' },
 ];
 
 export function FooterNav() {

@@ -36,7 +36,7 @@ service cloud.firestore {
         request.resource.data.userId == request.auth.uid;
 
       allow delete: if request.auth != null &&
-        resource.data.userId == request.auth.uid;
+        (resource == null || resource.data.userId == request.auth.uid);
     }
 
     // 5. quizTitles collection - per-user custom quiz titles
@@ -52,7 +52,7 @@ service cloud.firestore {
         request.resource.data.userId == request.auth.uid;
 
       allow delete: if request.auth != null &&
-        resource.data.userId == request.auth.uid;
+        (resource == null || resource.data.userId == request.auth.uid);
     }
 
     match /quizAttempts/{attemptId} {
@@ -67,7 +67,39 @@ service cloud.firestore {
         request.resource.data.userId == request.auth.uid;
 
       allow delete: if request.auth != null &&
+        (resource == null || resource.data.userId == request.auth.uid);
+    }
+
+    // 6. savedQuizzes collection - "Save" pulls a public quiz into your Quizzes page
+    match /savedQuizzes/{savedId} {
+      allow read: if request.auth != null &&
         resource.data.userId == request.auth.uid;
+
+      allow create: if request.auth != null &&
+        request.resource.data.userId == request.auth.uid;
+
+      allow update: if request.auth != null &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == request.auth.uid;
+
+      allow delete: if request.auth != null &&
+        (resource == null || resource.data.userId == request.auth.uid);
+    }
+
+    // 7. quizFavorites collection - star marking for the favorites-first sort
+    match /quizFavorites/{favoriteId} {
+      allow read: if request.auth != null &&
+        resource.data.userId == request.auth.uid;
+
+      allow create: if request.auth != null &&
+        request.resource.data.userId == request.auth.uid;
+
+      allow update: if request.auth != null &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == request.auth.uid;
+
+      allow delete: if request.auth != null &&
+        (resource == null || resource.data.userId == request.auth.uid);
     }
   }
 }

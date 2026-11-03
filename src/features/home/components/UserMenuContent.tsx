@@ -1,9 +1,11 @@
 import { useNavigate } from 'react-router-dom';
 import { Fragment, useState } from 'react';
 import { User, Lock, SquarePen, LogOut, ChevronDown, UserPlus, Check, X } from 'lucide-react';
-import { updateProfile, sendPasswordResetEmail } from 'firebase/auth';
+import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useAuth } from '@/features/auth/context/AuthContext';
+import { renameUsername } from '@/features/users';
+import { username as usernameValidator } from '@/shared/validations/fields';
 import { Button, Card } from '@/shared/components/ui';
 
 // Mock additional accounts - in real app this would come from auth context/localStorage
@@ -29,6 +31,7 @@ export function UserMenuContent() {
   const [isEditingUsername, setIsEditingUsername] = useState(false);
   const [usernameDraft, setUsernameDraft] = useState('');
   const [isSavingUsername, setIsSavingUsername] = useState(false);
+  const [usernameError, setUsernameError] = useState<string | null>(null);
 
   const username = user?.displayName || user?.email?.split('@')[0] || 'User';
   const [localName, setLocalName] = useState(username);
@@ -68,26 +71,41 @@ export function UserMenuContent() {
 
   const handleEditUsername = () => {
     setUsernameDraft(localName);
+    setUsernameError(null);
     setIsEditingUsername(true);
   };
 
+  // Full rename flow (was: Auth displayName only, which left users/{uid}.username
+  // stale and the usernames/ reverse-lookup doc unrenamed). Validates the format
+  // first, then hands off to the atomic API (availability check + usernames swap
+  // + Auth/users update). Inline errors instead of alert().
   const handleSaveUsername = async () => {
     const trimmed = usernameDraft.trim();
     if (!trimmed || !user) {
       setIsEditingUsername(false);
       return;
     }
-    setIsSavingUsername(true);
-    try {
-      await updateProfile(user, { displayName: trimmed });
-      setLocalName(trimmed);
-      setIsEditingUsername(false);
-    } catch (err) {
-      console.error('Failed to update username:', err);
-      alert('Failed to update username. Please try again.');
-    } finally {
-      setIsSavingUsername(false);
+
+    const validationError = usernameValidator(trimmed);
+    if (validationError) {
+      setUsernameError(validationError.message);
+      return;
     }
+
+    setIsSavingUsername(true);
+    setUsernameError(null);
+    const result = await renameUsername(trimmed);
+    if (result.success) {
+      setLocalName(trimmed.toLowerCase());
+      setIsEditingUsername(false);
+    } else {
+      setUsernameError(
+        result.errorCode === 'username-taken'
+          ? 'This username is already taken'
+          : 'Failed to update username. Please try again.'
+      );
+    }
+    setIsSavingUsername(false);
   };
 
   return (
@@ -250,8 +268,14 @@ export function UserMenuContent() {
                     className="mt-1 w-full text-sm font-medium text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-900 border-2 border-primary-500 rounded-lg px-2 py-0.5 focus:outline-none"
                     autoFocus
                     aria-label="Edit username"
+                    aria-invalid={usernameError ? true : undefined}
                     disabled={isSavingUsername}
                   />
+                  {usernameError && (
+                    <p className="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">
+                      {usernameError}
+                    </p>
+                  )}
                 </div>
                 <button
                   type="submit"
@@ -263,7 +287,10 @@ export function UserMenuContent() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setIsEditingUsername(false)}
+                  onClick={() => {
+                    setUsernameError(null);
+                    setIsEditingUsername(false);
+                  }}
                   className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 flex-shrink-0"
                   aria-label="Cancel editing"
                   disabled={isSavingUsername}
