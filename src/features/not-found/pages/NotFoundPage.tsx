@@ -5,7 +5,7 @@ export function NotFoundPage() {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 pb-20">
+    <div className="min-h-dvh flex items-center justify-center p-6 pb-20">
       <div className="text-center mb-15">
         <img
           src="/page-not-found.png"

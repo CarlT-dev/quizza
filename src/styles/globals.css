@@ -41,10 +41,172 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
+  /* Track the visible viewport (dvh) — 100vh alone is the *largest* viewport,
+     so mobile browser chrome (URL bar) always left a dead scrollable strip. */
+  min-height: 100dvh;
   color: inherit;
 }
 
 #root {
   width: 100%;
   min-height: 100vh;
+  /* Same dvh fallback pattern as body — either one left at 100vh alone
+     would keep forcing the document to the large-viewport height. */
+  min-height: 100dvh;
+}
+
+/* Custom loading animations */
+@keyframes blob {
+  0% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -50px) scale(1.1); }
+  66% { transform: translate(-20px, 20px) scale(0.9); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+@keyframes progress {
+  0% { width: 0%; }
+  100% { width: 100%; }
+}
+
+.animate-blob {
+  animation: blob 7s infinite ease-in-out;
+}
+
+.animate-progress {
+  animation: progress 1.2s ease-out forwards;
+}
+
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+
+/* Page transition animations */
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slide-in-left {
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slide-out-left {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+}
+
+@keyframes slide-out-right {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 300ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.animate-slide-in-left {
+  animation: slide-in-left 300ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.animate-slide-out-left {
+  animation: slide-out-left 300ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.animate-slide-out-right {
+  animation: slide-out-right 300ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.animate-fade-in {
+  animation: fade-in 200ms ease-out both;
+}
+
+.animate-fade-out {
+  animation: fade-out 150ms ease-in both;
+}
+
+/* Skeleton shimmer (used by loading placeholders) */
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.dark .skeleton {
+  background: linear-gradient(90deg, #374151 25%, #4b5563 50%, #374151 75%);
+  background-size: 200% 100%;
+}
+
+.skeleton-rounded {
+  border-radius: 0.5rem;
+}
+
+/* Card progress-strip fill: faint white with a brighter band sweeping through
+   (reuses the skeleton @keyframes shimmer) */
+.progress-shimmer {
+  background-image: linear-gradient(90deg, rgba(255,255,255,0.4) 25%, rgba(255,255,255,0.85) 50%, rgba(255,255,255,0.4) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .animate-slide-in-right,
+  .animate-slide-in-left,
+  .animate-slide-out-left,
+  .animate-slide-out-right,
+  .animate-fade-in,
+  .animate-fade-out,
+  .skeleton,
+  .progress-shimmer {
+    animation-duration: 0.01ms !important;
+    animation-delay: -0.01ms !important;
+  }
 }
