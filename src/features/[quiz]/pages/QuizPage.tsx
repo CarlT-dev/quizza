@@ -232,7 +232,7 @@ export function QuizPage() {
 
     if (isLoading) {
       return (
-        <div className="min-h-screen bg-primary-50/10 dark:bg-gray-900 flex flex-col">
+        <div className="flex-1 bg-primary-50/10 dark:bg-gray-900 flex flex-col">
           {renderStartHeader()}
           <main className="flex-1 flex items-center justify-center">
             <div className="flex flex-col items-center gap-4">
@@ -246,7 +246,7 @@ export function QuizPage() {
 
     if (error) {
       return (
-        <div className="min-h-screen bg-primary-50/10 dark:bg-gray-900 flex flex-col">
+        <div className="flex-1 bg-primary-50/10 dark:bg-gray-900 flex flex-col">
           {renderStartHeader()}
           <main className="flex-1 flex items-center justify-center px-4">
             <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl border border-red-200 dark:border-red-800 p-8 text-center">
@@ -261,7 +261,7 @@ export function QuizPage() {
     }
 
     return (
-      <div className="min-h-screen bg-primary-50/10 dark:bg-gray-900 flex flex-col">
+      <div className="flex-1 bg-primary-50/10 dark:bg-gray-900 flex flex-col">
         {/* Header - HomePage style container */}
         <header className="flex items-center justify-between px-4 py-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
           <button
@@ -359,7 +359,7 @@ export function QuizPage() {
   // --- VIEW 2: QUIZ PAGE (Question by Question) ---
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-primary-50/10 dark:bg-gray-900 flex items-center justify-center">
+      <div className="flex-1 bg-primary-50/10 dark:bg-gray-900 flex items-center justify-center">
         <Loader2 className="w-10 h-10 text-primary-500 animate-spin" />
       </div>
     );
@@ -368,7 +368,7 @@ export function QuizPage() {
   // Guard: no quiz data or no questions
   if (!quizData || quizData.questions.length === 0) {
     return (
-      <div className="min-h-screen bg-primary-50/10 dark:bg-gray-900 flex items-center justify-center px-4">
+      <div className="flex-1 bg-primary-50/10 dark:bg-gray-900 flex items-center justify-center px-4">
         <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl border border-red-200 dark:border-red-800 p-8 text-center">
           <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Quiz Not Available</h2>
@@ -390,7 +390,7 @@ export function QuizPage() {
   const selectedAnswer = answers.get(currentQuestion.id);
 
   return (
-    <div className="min-h-screen bg-primary-50/10 dark:bg-gray-900 flex flex-col">
+    <div className="flex-1 bg-primary-50/10 dark:bg-gray-900 flex flex-col">
       {/* Header with back chevron + progress bar */}
       <header className="py-4">
         {/* Back Chevron */}

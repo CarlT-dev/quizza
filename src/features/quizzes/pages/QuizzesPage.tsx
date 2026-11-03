@@ -454,7 +454,7 @@ export function QuizzesPage() {
     });
 
   return (
-    <div className="min-h-screen bg-primary-50/30 dark:bg-gray-900">
+    <div className="flex-1 bg-primary-50/30 dark:bg-gray-900">
       {renderHeader()}
 
       {/* Content */}

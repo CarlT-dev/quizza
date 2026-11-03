@@ -82,7 +82,7 @@ export function SearchPage() {
   const hasResults = people.length > 0 || quizResults.length > 0;
 
   return (
-    <div className="min-h-screen bg-primary-50/30 dark:bg-gray-900">
+    <div className="flex-1 bg-primary-50/30 dark:bg-gray-900">
       {/* Sticky search header — full-width input, Search icon absolutely
           positioned left. autoFocus + PageTransition remounting per pathname
           refocuses the input on every tab tap. */}
