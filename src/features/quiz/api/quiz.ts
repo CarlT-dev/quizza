@@ -15,9 +15,13 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
-  getCountFromServer
+  getCountFromServer,
+  runTransaction,
+  documentId
 } from 'firebase/firestore';
 import type { QuizResponse } from '@/features/genai/schema';
+import { computeUserStats, type UserStats } from '@/shared/utils/quizStats';
+import { saveUserStats } from '@/features/users/api/users';
 
 export interface QuizDocument {
   id?: string;
@@ -41,6 +45,16 @@ export interface QuizProgress {
     correct: number;
     total: number;
   };
+  /**
+   * Set exactly once on the quiz's first completion; retakes never overwrite
+   * it. Legacy docs (completed before this field existed) have no firstScore
+   * and fall back to their existing `score` at read time.
+   */
+  firstScore?: {
+    correct: number;
+    total: number;
+  };
+  firstCompletedAt?: Timestamp;
   answers?: Record<string, number | string | string[]>;
   details?: Array<{
     questionId: string;
@@ -62,6 +76,20 @@ export interface QuizTitle {
   userId: string;
   quizId: string;
   title: string;
+  updatedAt: Timestamp;
+}
+
+/** Row in savedQuizzes — "Save" on the Home feed pulls a public quiz into the user's Quizzes page. */
+export interface SavedQuiz {
+  userId: string;
+  quizId: string;
+  updatedAt: Timestamp;
+}
+
+/** Row in quizFavorites — the star on a quiz card; drives the favorites-first sort. */
+export interface QuizFavorite {
+  userId: string;
+  quizId: string;
   updatedAt: Timestamp;
 }
 
@@ -138,6 +166,8 @@ export async function deleteQuiz(quizId: string, userId: string): Promise<void> 
     deleteDoc(doc(db, 'quizAttempts', `${userId}_${quizId}`)),
     deleteDoc(doc(db, 'quizPreferences', `${userId}_${quizId}`)),
     deleteDoc(doc(db, 'quizTitles', `${userId}_${quizId}`)),
+    deleteDoc(doc(db, 'savedQuizzes', `${userId}_${quizId}`)),
+    deleteDoc(doc(db, 'quizFavorites', `${userId}_${quizId}`)),
   ]);
   cleanups.forEach(result => {
     if (result.status === 'rejected') {
@@ -210,6 +240,28 @@ export async function getPublicQuizzes(maxCount = 20): Promise<QuizDocument[]> {
 }
 
 /**
+ * Fetches one user's public quizzes (profile page). Two equality filters +
+ * client-side createdAt sort — no orderBy here, which would require a new
+ * composite index.
+ */
+export async function getPublicQuizzesByUser(userId: string, maxCount = 50): Promise<QuizDocument[]> {
+  const q = query(
+    collection(db, 'quizzes'),
+    where('createdBy', '==', userId),
+    where('visibility', '==', 'public'),
+    limit(maxCount)
+  );
+
+  const querySnapshot = await getDocs(q);
+  return querySnapshot.docs
+    .map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    } as QuizDocument))
+    .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+}
+
+/**
  * Saves or updates quiz progress for a user
  */
 export async function saveQuizProgress(
@@ -266,6 +318,158 @@ export async function getQuizzesProgress(quizIds: string[], userId: string): Pro
   }
 
   return progressMap;
+}
+
+/**
+ * Saves a public quiz to the user's Quizzes page ("Save" on the Home feed).
+ * Distinct from favorites: saving pulls the quiz into your list, favoriting
+ * only marks it for sort priority.
+ */
+export async function saveQuizForUser(quizId: string, userId: string): Promise<void> {
+  await setDoc(doc(db, 'savedQuizzes', `${userId}_${quizId}`), {
+    userId,
+    quizId,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/** Removes a quiz from the user's saved list. */
+export async function unsaveQuiz(quizId: string, userId: string): Promise<void> {
+  await deleteDoc(doc(db, 'savedQuizzes', `${userId}_${quizId}`));
+}
+
+/** The user's saved-quiz rows (quiz docs themselves are fetched separately). */
+export async function getSavedQuizzes(userId: string): Promise<SavedQuiz[]> {
+  const q = query(collection(db, 'savedQuizzes'), where('userId', '==', userId));
+  const querySnapshot = await getDocs(q);
+  return querySnapshot.docs.map(docSnap => docSnap.data() as SavedQuiz);
+}
+
+/** Marks a quiz as favorite (the star on a quiz card). */
+export async function saveQuizFavorite(quizId: string, userId: string): Promise<void> {
+  await setDoc(doc(db, 'quizFavorites', `${userId}_${quizId}`), {
+    userId,
+    quizId,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/** Removes a quiz's favorite mark. */
+export async function removeQuizFavorite(quizId: string, userId: string): Promise<void> {
+  await deleteDoc(doc(db, 'quizFavorites', `${userId}_${quizId}`));
+}
+
+/** The user's favorite rows. */
+export async function getQuizFavorites(userId: string): Promise<QuizFavorite[]> {
+  const q = query(collection(db, 'quizFavorites'), where('userId', '==', userId));
+  const querySnapshot = await getDocs(q);
+  return querySnapshot.docs.map(docSnap => docSnap.data() as QuizFavorite);
+}
+
+/**
+ * All of the user's attempt docs. Per-user attempts are few, so everything
+ * downstream (unfinished filter, first-attempt stats) filters and sorts
+ * client-side — no composite indexes needed.
+ */
+export async function getUserAttempts(
+  userId: string,
+  maxCount = 200
+): Promise<Array<QuizProgress & { quizId: string }>> {
+  const q = query(
+    collection(db, 'quizAttempts'),
+    where('userId', '==', userId),
+    limit(maxCount)
+  );
+  const querySnapshot = await getDocs(q);
+  return querySnapshot.docs.map(docSnap => docSnap.data() as QuizProgress & { quizId: string });
+}
+
+/**
+ * Fetches quizzes by id in batched-10 'in' queries. Docs that are missing or
+ * unreadable (e.g. made private by their owner after being saved) are
+ * silently omitted — callers drop rows whose quiz is absent. Result order is
+ * unspecified; callers sort.
+ */
+export async function getQuizzesByIds(quizIds: string[]): Promise<QuizDocument[]> {
+  const uniqueIds = [...new Set(quizIds)];
+  const found: QuizDocument[] = [];
+
+  for (let i = 0; i < uniqueIds.length; i += 10) {
+    const batch = uniqueIds.slice(i, i + 10);
+    const q = query(collection(db, 'quizzes'), where(documentId(), 'in', batch));
+    try {
+      const querySnapshot = await getDocs(q);
+      querySnapshot.docs.forEach(docSnap => {
+        found.push({ id: docSnap.id, ...docSnap.data() } as QuizDocument);
+      });
+    } catch (error: unknown) {
+      // Rules are not filters: one quiz the user can't read (made private
+      // after they saved it) denies the WHOLE 'in' batch, not just that doc.
+      const err = error as { code?: string };
+      if (err.code !== 'permission-denied') throw error;
+
+      // Fall back to per-id gets for just this batch: readable docs load,
+      // each unreadable one is dropped like a deleted doc.
+      for (const id of batch) {
+        try {
+          const snap = await getDoc(doc(db, 'quizzes', id));
+          if (snap.exists()) {
+            found.push({ id: snap.id, ...snap.data() } as QuizDocument);
+          }
+        } catch (idError: unknown) {
+          // A denied single get either reports exists() === false (handled
+          // above) or rejects with permission-denied (handled here) — drop
+          // it either way. Any other error still propagates.
+          const idErr = idError as { code?: string };
+          if (idErr.code !== 'permission-denied') throw idError;
+        }
+      }
+    }
+  }
+
+  return found;
+}
+
+/**
+ * Captures the quiz's first-take score exactly once, in a transaction, and
+ * must run BEFORE the completed save merges completed:true — once that lands,
+ * retakes and legacy docs would be indistinguishable. Returns true when this
+ * call was the quiz's first completion. userId/quizId are included in the
+ * payload so a first write onto a not-yet-existing attempt doc passes the
+ * security rules (request.resource.data.userId == request.auth.uid).
+ */
+export async function recordFirstCompletion(
+  quizId: string,
+  userId: string,
+  score: { correct: number; total: number }
+): Promise<boolean> {
+  const attemptRef = doc(db, 'quizAttempts', `${userId}_${quizId}`);
+  return runTransaction(db, async (tx) => {
+    const attemptSnap = await tx.get(attemptRef);
+    if (attemptSnap.exists() && attemptSnap.data().completed === true) {
+      return false; // retake (or legacy completed doc) — first take already counted
+    }
+    tx.set(attemptRef, {
+      userId,
+      quizId,
+      firstScore: score,
+      firstCompletedAt: serverTimestamp(),
+    }, { merge: true });
+    return true;
+  });
+}
+
+/**
+ * Recomputes users/{uid}.stats from a fresh attempts read (self-healing,
+ * never incremental). Returns null — writing nothing — when no attempt
+ * counts yet, so the Status page can show a real zero-state.
+ */
+export async function updateUserStatsFromAttempts(userId: string): Promise<UserStats | null> {
+  const attempts = await getUserAttempts(userId);
+  const stats = computeUserStats(attempts);
+  if (!stats) return null;
+  await saveUserStats(userId, stats);
+  return stats;
 }
 
 /**

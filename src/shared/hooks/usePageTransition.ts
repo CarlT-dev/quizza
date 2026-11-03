@@ -10,14 +10,13 @@ interface PageTransitionState {
 
 /**
  * Tab order matching FooterNav items.
- * Pages NOT in this map (detail pages like /quiz/:id) are treated as "push" from right.
+ * Pages NOT in this map (detail pages like /quiz/:id, /user/:uid) are treated as "push" from right.
  */
 const TAB_INDEX: Record<string, number> = {
   '/': 0,
-  '/quizzes': 1,
-  '/create-quiz': 2,
-  '/profile': 3,
-  '/settings': 4,
+  '/search': 1,
+  '/quizzes': 2,
+  '/status': 3,
 } as const;
 
 /**

@@ -1,5 +1,5 @@
 import { memo, useCallback, useMemo, useState, useRef, useEffect } from 'react';
-import { ChevronDown, Edit, Globe, Lock, Users, User, HelpCircle, Target, Brain, List, Check, MoreVertical, Trash2 } from 'lucide-react';
+import { ChevronDown, Edit, Globe, Lock, Users, User, HelpCircle, Target, Brain, List, Check, MoreVertical, Trash2, Star, BookmarkX } from 'lucide-react';
 import { Card } from '@/shared/components/ui';
 import { ColorPalette } from '@/shared/components/ui/ColorPalette';
 import { useCardSwipe } from '../hooks/useCardSwipe';
@@ -16,6 +16,13 @@ interface QuizCardProps {
   onTitleChange?: (title: string) => void;
   onToggleVisibility?: () => void;
   onDelete?: () => void;
+  /** Resolved username for a non-owner quiz (falls back to a uid slice). */
+  ownerName?: string;
+  /** Favorite star at the bottom-right of the card; omitted hides the star. */
+  isFavorite?: boolean;
+  onToggleFavorite?: (quizId: string) => void;
+  /** Offered in the ⋯ menu for saved (non-owned) quizzes. */
+  onUnsave?: (quizId: string) => void;
 }
 
 // Progress bar colors per card color. Literal class strings only — Tailwind v4
@@ -46,6 +53,10 @@ export const QuizCard = memo(function QuizCard({
   onTitleChange,
   onToggleVisibility,
   onDelete,
+  ownerName,
+  isFavorite,
+  onToggleFavorite,
+  onUnsave,
 }: QuizCardProps) {
   const isOwner = currentUserId && quiz.createdBy === currentUserId;
   const hasProgress = progress && progress.answeredCount > 0;
@@ -403,6 +414,20 @@ export const QuizCard = memo(function QuizCard({
                     {quiz.visibility === 'public' ? 'Make private' : 'Make public'}
                   </button>
                 )}
+                {onUnsave && !isConfirmingDelete && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      onUnsave(quiz.id ?? '');
+                      closeMenu();
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                  >
+                    <BookmarkX className="w-4 h-4" aria-hidden="true" />
+                    Remove from saved
+                  </button>
+                )}
                 {canManage && onDelete && !isConfirmingDelete && (
                   <button
                     type="button"
@@ -479,7 +504,7 @@ export const QuizCard = memo(function QuizCard({
                   {!isOwner && (
                     <span className="flex items-center gap-1">
                       <Users className="w-3 h-3" aria-hidden="true" />
-                      {quiz.createdBy.slice(0, 8)}...
+                      {ownerName ?? `${quiz.createdBy.slice(0, 8)}...`}
                     </span>
                   )}
                 </div>
@@ -534,18 +559,37 @@ export const QuizCard = memo(function QuizCard({
               </div>
             )}
 
-            {/* Metadata Accordion Trigger */}
-            <button
-              onClick={toggleMetadata}
-              className="flex items-center justify-between w-full py-2 text-left"
-              aria-expanded={showMetadata}
-              aria-controls="metadata-content"
-            >
-              <span className="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+            {/* Metadata Accordion Trigger + Favorite star (bottom-right) */}
+            <div className="flex items-center justify-between w-full py-2">
+              <button
+                onClick={toggleMetadata}
+                className="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400"
+                aria-expanded={showMetadata}
+                aria-controls="metadata-content"
+              >
                 <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showMetadata ? 'rotate-180' : ''}`} aria-hidden="true" />
                 Details
-              </span>
-            </button>
+              </button>
+              {onToggleFavorite && (
+                <button
+                  type="button"
+                  {...menuEventProps}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleFavorite(quiz.id ?? '');
+                  }}
+                  className={`p-1.5 rounded-lg transition-colors ${
+                    isFavorite
+                      ? 'text-yellow-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/20'
+                      : 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+                  aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                  aria-pressed={isFavorite}
+                >
+                  <Star className={`w-5 h-5 ${isFavorite ? 'fill-yellow-400' : ''}`} aria-hidden="true" />
+                </button>
+              )}
+            </div>
 
             {/* Metadata Accordion Content */}
             <div
