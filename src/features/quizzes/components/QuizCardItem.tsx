@@ -13,10 +13,8 @@ interface QuizCardItemProps {
   onQuizClick: (quizId: string) => void;
   onColorChange: (quizId: string, colorId: CardColorId) => void;
   onTitleChange: (quizId: string, title: string) => void;
-  onToggleVisibility: (quizId: string) => void;
   onDelete: (quizId: string) => void;
   onToggleFavorite: (quizId: string) => void;
-  onUnsave?: (quizId: string) => void;
 }
 
 /**
@@ -35,10 +33,8 @@ export const QuizCardItem = memo(function QuizCardItem({
   onQuizClick,
   onColorChange,
   onTitleChange,
-  onToggleVisibility,
   onDelete,
   onToggleFavorite,
-  onUnsave,
 }: QuizCardItemProps) {
   const quizId = quiz.id ?? '';
 
@@ -54,10 +50,8 @@ export const QuizCardItem = memo(function QuizCardItem({
       onClick={() => onQuizClick(quizId)}
       onColorChange={(newColorId) => onColorChange(quizId, newColorId)}
       onTitleChange={(newTitle) => onTitleChange(quizId, newTitle)}
-      onToggleVisibility={() => onToggleVisibility(quizId)}
       onDelete={() => onDelete(quizId)}
       onToggleFavorite={() => onToggleFavorite(quizId)}
-      onUnsave={onUnsave ? () => onUnsave(quizId) : undefined}
     />
   );
 });

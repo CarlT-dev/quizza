@@ -2,13 +2,9 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, X, ChevronRight, SearchX } from 'lucide-react';
 import { useDebouncedValue } from '@/shared/hooks';
-import { useUsernames } from '@/features/users';
-import type { QuizDocument } from '@/features/quiz';
-import { PublicQuizCard } from '@/features/quizzes/components/PublicQuizCard';
-import { searchUsernames, getCachedPublicQuizzes, type UsernameSearchResult } from '../api/search';
+import { searchUsernames, type UsernameSearchResult } from '../api/search';
 
 const DEBOUNCE_MS = 250;
-const MAX_QUIZ_RESULTS = 20;
 const MAX_PEOPLE_RESULTS = 10;
 
 export function SearchPage() {
@@ -18,13 +14,8 @@ export function SearchPage() {
   const debouncedQuery = useDebouncedValue(query, DEBOUNCE_MS);
 
   const [people, setPeople] = useState<UsernameSearchResult[]>([]);
-  const [quizResults, setQuizResults] = useState<QuizDocument[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Resolved creator names for the quiz result cards
-  const ownerUids = [...new Set(quizResults.map(q => q.createdBy))];
-  const ownerNames = useUsernames(ownerUids);
 
   useEffect(() => {
     const trimmed = debouncedQuery.trim().toLowerCase();
@@ -35,7 +26,6 @@ export function SearchPage() {
     void Promise.resolve().then(async () => {
       if (!trimmed) {
         setPeople([]);
-        setQuizResults([]);
         setError(null);
         setIsSearching(false);
         return;
@@ -43,23 +33,10 @@ export function SearchPage() {
 
       setIsSearching(true);
       try {
-        // People come from a prefix query; quiz matches are filtered
-        // client-side over the cached public feed
-        const [nameResults, publicQuizzes] = await Promise.all([
-          searchUsernames(trimmed, MAX_PEOPLE_RESULTS),
-          getCachedPublicQuizzes(),
-        ]);
+        // People come from a prefix query on the public usernames collection
+        const nameResults = await searchUsernames(trimmed, MAX_PEOPLE_RESULTS);
         if (cancelled) return;
         setPeople(nameResults);
-        setQuizResults(
-          publicQuizzes
-            .filter(
-              q =>
-                q.title.toLowerCase().includes(trimmed) ||
-                q.topic.toLowerCase().includes(trimmed)
-            )
-            .slice(0, MAX_QUIZ_RESULTS)
-        );
         setError(null);
       } catch (err) {
         console.error('Search failed:', err);
@@ -79,7 +56,7 @@ export function SearchPage() {
   }, [debouncedQuery]);
 
   const hasQuery = query.trim().length > 0;
-  const hasResults = people.length > 0 || quizResults.length > 0;
+  const hasResults = people.length > 0;
 
   return (
     <div className="flex-1 bg-primary-50/30 dark:bg-gray-900">
@@ -96,8 +73,8 @@ export function SearchPage() {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search people and quizzes"
-            aria-label="Search people and quizzes"
+            placeholder="Search people"
+            aria-label="Search people"
             autoFocus
             autoComplete="off"
             className="w-full bg-gray-100 dark:bg-gray-800 rounded-xl pl-10 pr-10 py-2.5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -121,7 +98,7 @@ export function SearchPage() {
             <Search className="w-12 h-12 text-gray-300 dark:text-gray-600 mb-4" aria-hidden="true" />
             <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-1">Search Quizza</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 max-w-xs">
-              Find people by username, or quizzes by title and topic.
+              Find people by username.
             </p>
           </div>
         ) : error ? (
@@ -169,23 +146,6 @@ export function SearchPage() {
               </section>
             )}
 
-            {quizResults.length > 0 && (
-              <section aria-label="Quizzes">
-                <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
-                  Quizzes
-                </h2>
-                <div className="space-y-3">
-                  {quizResults.map((quiz) => (
-                    <PublicQuizCard
-                      key={quiz.id}
-                      quiz={quiz}
-                      ownerName={ownerNames.get(quiz.createdBy)}
-                      onClick={(quizId) => navigate(`/quiz/${quizId}`)}
-                    />
-                  ))}
-                </div>
-              </section>
-            )}
           </div>
         )}
       </main>

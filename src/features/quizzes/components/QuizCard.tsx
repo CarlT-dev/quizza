@@ -1,5 +1,5 @@
 import { memo, useCallback, useMemo, useState, useRef, useEffect } from 'react';
-import { ChevronDown, Edit, Globe, Lock, Users, User, HelpCircle, Target, Brain, List, Check, MoreVertical, Trash2, Star, BookmarkX } from 'lucide-react';
+import { ChevronDown, Edit, Users, User, HelpCircle, Target, Brain, List, Check, MoreVertical, Trash2, Star } from 'lucide-react';
 import { Card } from '@/shared/components/ui';
 import { ColorPalette } from '@/shared/components/ui/ColorPalette';
 import { useCardSwipe } from '../hooks/useCardSwipe';
@@ -14,15 +14,12 @@ interface QuizCardProps {
   onClick: () => void;
   onColorChange: (colorId: CardColorId) => void;
   onTitleChange?: (title: string) => void;
-  onToggleVisibility?: () => void;
   onDelete?: () => void;
   /** Resolved username for a non-owner quiz (falls back to a uid slice). */
   ownerName?: string;
   /** Favorite star at the bottom-right of the card; omitted hides the star. */
   isFavorite?: boolean;
   onToggleFavorite?: (quizId: string) => void;
-  /** Offered in the ⋯ menu for saved (non-owned) quizzes. */
-  onUnsave?: (quizId: string) => void;
 }
 
 // Progress bar colors per card color. Literal class strings only — Tailwind v4
@@ -51,12 +48,10 @@ export const QuizCard = memo(function QuizCard({
   onClick,
   onColorChange,
   onTitleChange,
-  onToggleVisibility,
   onDelete,
   ownerName,
   isFavorite,
   onToggleFavorite,
-  onUnsave,
 }: QuizCardProps) {
   const isOwner = currentUserId && quiz.createdBy === currentUserId;
   const hasProgress = progress && progress.answeredCount > 0;
@@ -68,7 +63,7 @@ export const QuizCard = memo(function QuizCard({
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState('');
-  const canManage = Boolean(isOwner) && (Boolean(onToggleVisibility) || Boolean(onDelete));
+  const canManage = Boolean(isOwner) && Boolean(onDelete);
   const canRename = Boolean(currentUserId) && Boolean(onTitleChange);
 
   // Local state for instant UI update, synced with prop initially
@@ -258,30 +253,6 @@ export const QuizCard = memo(function QuizCard({
     return 'border-white/20';
   }, [localColorId]);
 
-  // Badge background classes
-  const badgeBgClasses = useMemo(() => {
-    if (localColorId === 'default') {
-      return 'bg-primary-50 dark:bg-primary-900/30';
-    }
-    return 'bg-white/20';
-  }, [localColorId]);
-
-  // Badge text classes
-  const badgeTextClasses = useMemo(() => {
-    if (localColorId === 'default') {
-      return 'text-primary-700 dark:text-primary-300';
-    }
-    return 'text-white';
-  }, [localColorId]);
-
-  // Badge border classes
-  const badgeBorderClasses = useMemo(() => {
-    if (localColorId === 'default') {
-      return 'border-primary-200 dark:border-primary-800';
-    }
-    return 'border-white/30';
-  }, [localColorId]);
-
   // Score chip classes: green family on default cards; white-on-gradient on
   // colored cards (theme-invariant - the gradient is identical in both modes,
   // matching the colored-card badge convention above, so no dark: pair there)
@@ -291,9 +262,6 @@ export const QuizCard = memo(function QuizCard({
     }
     return 'bg-white/20 text-white border-white/30';
   }, [localColorId]);
-
-  // Format visibility text
-  const visibilityText = quiz.visibility === 'public' ? 'Everyone' : 'Only you';
 
   // Accordion state for metadata
   const [showMetadata, setShowMetadata] = useState(false);
@@ -396,38 +364,6 @@ export const QuizCard = memo(function QuizCard({
                     Rename
                   </button>
                 )}
-                {canManage && onToggleVisibility && !isConfirmingDelete && (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      onToggleVisibility();
-                      closeMenu();
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                  >
-                    {quiz.visibility === 'public' ? (
-                      <Lock className="w-4 h-4" aria-hidden="true" />
-                    ) : (
-                      <Globe className="w-4 h-4" aria-hidden="true" />
-                    )}
-                    {quiz.visibility === 'public' ? 'Make private' : 'Make public'}
-                  </button>
-                )}
-                {onUnsave && !isConfirmingDelete && (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      onUnsave(quiz.id ?? '');
-                      closeMenu();
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                  >
-                    <BookmarkX className="w-4 h-4" aria-hidden="true" />
-                    Remove from saved
-                  </button>
-                )}
                 {canManage && onDelete && !isConfirmingDelete && (
                   <button
                     type="button"
@@ -509,15 +445,6 @@ export const QuizCard = memo(function QuizCard({
                   )}
                 </div>
                 <div className="flex items-center gap-2 mt-2 flex-wrap">
-                  <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full ${badgeBgClasses} ${badgeTextClasses} ${badgeBorderClasses} border`}>
-                    {quiz.visibility === 'public' ? (
-                      <Globe className="w-3 h-3" aria-hidden="true" />
-                    ) : (
-                      <Lock className="w-3 h-3" aria-hidden="true" />
-                    )}
-                    {visibilityText}
-                  </span>
-
                   {/* Score chip - only for a completed attempt: setDoc merge keeps the
                       old score during a retake, so a bare score check would show a
                       stale "8/10" beside a half-filled strip */}

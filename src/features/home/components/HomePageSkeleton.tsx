@@ -1,8 +1,7 @@
 /**
- * Skeleton for HomePage — mirrors the real layout: header, CTA card,
- * unfinished rows and For You feed cards. Mounting is controlled by the
- * parent's isLoading (the old internal 800ms self-hide could blank the page
- * behind a slower real fetch).
+ * Skeleton for HomePage — mirrors the real layout: header, CTA card and
+ * unfinished rows. Mounting is controlled by the parent's isLoading (the old
+ * internal 800ms self-hide could blank the page behind a slower real fetch).
  */
 export function HomePageSkeleton() {
   return (
@@ -53,20 +52,6 @@ export function HomePageSkeleton() {
             ))}
           </div>
 
-          {/* For You feed cards skeleton */}
-          <div className="space-y-3" aria-hidden="true">
-            {Array.from({ length: 2 }).map((_, i) => (
-              <div
-                key={i}
-                className="rounded-2xl overflow-hidden bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
-              >
-                <SkeletonBase className="h-[76px]" />
-                <div className="px-4 py-2.5">
-                  <SkeletonBase className="h-3 w-1/3 rounded" />
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       </main>
     </div>

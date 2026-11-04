@@ -4,22 +4,16 @@ import { useAuth } from '@/features/auth';
 import {
   getUserQuizzes,
   getUserQuizCount,
-  getSavedQuizzes,
-  getQuizzesByIds,
-  unsaveQuiz,
-  updateQuizVisibility,
   deleteQuiz,
   saveQuizTitle,
   type QuizDocument,
-  type SavedQuiz,
 } from '@/features/quiz';
 import { useQuizProgress } from '@/features/quiz/hooks/useQuizProgress';
 import { useQuizFavorites } from '@/features/quiz/hooks/useQuizFavorites';
-import { useUsernames } from '@/features/users';
 import { saveQuizColorPreference, type CardColorId } from '@/features/quiz/api/quiz';
 import { QuizCardItem } from '../components/QuizCardItem';
 import { QuizCardSkeleton } from '../components/QuizCardSkeleton';
-import { Plus, AlertTriangle, Search, X, ArrowDownUp } from 'lucide-react';
+import { Plus, AlertTriangle, Search, X, ArrowDownUp, Star } from 'lucide-react';
 import { Button } from '@/shared/components/ui';
 
 export function QuizzesPage() {
@@ -27,7 +21,6 @@ export function QuizzesPage() {
   const { user, loading: authLoading } = useAuth();
 
   const [quizzes, setQuizzes] = useState<QuizDocument[]>([]);
-  const [savedQuizDocs, setSavedQuizDocs] = useState<QuizDocument[]>([]);
   const [quizCount, setQuizCount] = useState(3);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -40,12 +33,13 @@ export function QuizzesPage() {
   // Sort order: favorites first (default) or pure recency
   const [sortMode, setSortMode] = useState<'favorites' | 'recent'>('favorites');
 
+  // Favorites view: reveals the favorites-only section
+  const [isFavoritesView, setIsFavoritesView] = useState(false);
+
   // Favorite stars (quizFavorites side-documents)
   const { favoriteIds, toggleFavorite } = useQuizFavorites(user?.uid);
 
-  // Fetch the user's quizzes plus the quizzes saved from the For You feed.
-  // The saved section is additive: a savedQuizzes failure (e.g. rules not yet
-  // deployed) degrades to the own-quizzes list instead of an error page.
+  // Fetch the user's quizzes
   useEffect(() => {
     if (authLoading) return;
 
@@ -61,22 +55,13 @@ export function QuizzesPage() {
       try {
         setIsLoading(true);
         setError(null);
-        // Fetch quizzes, count (drives skeleton amount) and saved rows in parallel
-        const [userQuizzes, countResult, savedRows] = await Promise.all([
+        // Fetch quizzes and count (drives skeleton amount) in parallel
+        const [userQuizzes, countResult] = await Promise.all([
           getUserQuizzes(user.uid, 50),
           getUserQuizCount(user.uid).catch(() => null),
-          getSavedQuizzes(user.uid).catch(err => {
-            console.error('Failed to fetch saved quizzes:', err);
-            return [] as SavedQuiz[];
-          }),
         ]);
-        // Saved rows -> quiz docs; ids already in the own list are skipped
-        const ownIds = new Set(userQuizzes.map(q => q.id));
-        const savedOnlyIds = savedRows.map(row => row.quizId).filter(id => !ownIds.has(id));
-        const savedDocs = savedOnlyIds.length > 0 ? await getQuizzesByIds(savedOnlyIds) : [];
         if (!cancelled) {
           setQuizzes(userQuizzes);
-          setSavedQuizDocs(savedDocs);
           if (countResult !== null) {
             setQuizCount(countResult);
           }
@@ -108,20 +93,11 @@ export function QuizzesPage() {
     }
   }, [isSearchOpen]);
 
-  // Merged list: own quizzes + saved public quizzes, deduped by id (own wins)
-  const mergedQuizzes = useMemo(() => {
-    const byId = new Map<string, QuizDocument>();
-    for (const quiz of [...quizzes, ...savedQuizDocs]) {
-      if (quiz.id && !byId.has(quiz.id)) byId.set(quiz.id, quiz);
-    }
-    return [...byId.values()];
-  }, [quizzes, savedQuizDocs]);
-
-  // Quiz IDs for progress/color fetching (own + saved, deduped).
+  // Quiz IDs for progress/color fetching.
   // Fresh array each memo - useQuizProgress sorts its copy in place.
   const quizIds = useMemo(
-    () => [...new Set(mergedQuizzes.map(q => q.id!).filter(Boolean))],
-    [mergedQuizzes]
+    () => [...new Set(quizzes.map(q => q.id!).filter(Boolean))],
+    [quizzes]
   );
 
   // Fetch progress and color preferences
@@ -131,18 +107,11 @@ export function QuizzesPage() {
     enabled: !!user && quizIds.length > 0,
   });
 
-  // Usernames for non-owner cards (saved quizzes show the creator's name)
-  const ownerUids = useMemo(
-    () => [...new Set(mergedQuizzes.filter(q => q.createdBy !== user?.uid).map(q => q.createdBy))],
-    [mergedQuizzes, user]
-  );
-  const ownerNames = useUsernames(ownerUids);
-
   // Sort: favorites first (favorites by createdAt desc, then the rest), or
   // pure recency. Client-side sort - no composite index needed.
   const sortedQuizzes = useMemo(() => {
     const createdMs = (quiz: QuizDocument) => quiz.createdAt?.toMillis?.() ?? 0;
-    return [...mergedQuizzes].sort((a, b) => {
+    return [...quizzes].sort((a, b) => {
       if (sortMode === 'favorites') {
         const af = favoriteIds.has(a.id ?? '') ? 1 : 0;
         const bf = favoriteIds.has(b.id ?? '') ? 1 : 0;
@@ -150,7 +119,7 @@ export function QuizzesPage() {
       }
       return createdMs(b) - createdMs(a);
     });
-  }, [mergedQuizzes, sortMode, favoriteIds]);
+  }, [quizzes, sortMode, favoriteIds]);
 
   // Live filter by title/topic over the merged, sorted list
   const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -163,6 +132,20 @@ export function QuizzesPage() {
   const filteredQuizzes = useMemo(
     () => (normalizedQuery ? sortedQuizzes.filter(matchesSearch) : sortedQuizzes),
     [sortedQuizzes, normalizedQuery, matchesSearch]
+  );
+
+  // Starred quizzes for their own section (still search-filtered, existing
+  // sorted order); while the view is shown the main list omits them so
+  // nothing appears twice.
+  const favoriteQuizzes = useMemo(
+    () => filteredQuizzes.filter(q => favoriteIds.has(q.id ?? '')),
+    [filteredQuizzes, favoriteIds]
+  );
+  const mainQuizzes = useMemo(
+    () => (isFavoritesView
+      ? filteredQuizzes.filter(q => !favoriteIds.has(q.id ?? ''))
+      : filteredQuizzes),
+    [filteredQuizzes, isFavoritesView, favoriteIds]
   );
 
   // Handle color change
@@ -197,60 +180,21 @@ export function QuizzesPage() {
     }
   }, [user, refetchProgress, updateTitle]);
 
-  // Quiz management: optimistic update with rollback on failure
-  const handleToggleVisibility = useCallback(async (quizId: string) => {
-    if (!user) return;
-    const prev = quizzes;
-    const target = prev.find(q => q.id === quizId);
-    if (!target) return;
-    const newVisibility = target.visibility === 'public' ? 'private' : 'public';
-    setQuizzes(prevQuizzes =>
-      prevQuizzes.map(q => (q.id === quizId ? { ...q, visibility: newVisibility } : q))
-    );
-    try {
-      await updateQuizVisibility(quizId, newVisibility);
-    } catch (err) {
-      console.error('Failed to update visibility:', err);
-      setQuizzes(prev);
-      alert('Failed to update visibility. Please try again.');
-    }
-  }, [user, quizzes]);
-
-  // Deleting an own quiz that was also saved: the API cleans up the saved row
-  // server-side, so the local saved copy must go too or it lingers as a ghost.
   const handleDeleteQuiz = useCallback(async (quizId: string) => {
     if (!user) return;
     const prev = quizzes;
-    const prevSaved = savedQuizDocs;
     const prevCount = quizCount;
     setQuizzes(prevQuizzes => prevQuizzes.filter(q => q.id !== quizId));
-    setSavedQuizDocs(prevDocs => prevDocs.filter(q => q.id !== quizId));
     setQuizCount(c => Math.max(0, c - 1));
     try {
       await deleteQuiz(quizId, user.uid);
     } catch (err) {
       console.error('Failed to delete quiz:', err);
       setQuizzes(prev);
-      setSavedQuizDocs(prevSaved);
       setQuizCount(prevCount);
       alert('Failed to delete quiz. Please try again.');
     }
-  }, [user, quizzes, savedQuizDocs, quizCount]);
-
-  // Unsave: remove a saved (non-owned) quiz from the merged list - optimistic
-  // with rollback on failure
-  const handleUnsave = useCallback(async (quizId: string) => {
-    if (!user) return;
-    const prev = savedQuizDocs;
-    setSavedQuizDocs(prevDocs => prevDocs.filter(q => q.id !== quizId));
-    try {
-      await unsaveQuiz(quizId, user.uid);
-    } catch (err) {
-      console.error('Failed to remove saved quiz:', err);
-      setSavedQuizDocs(prev);
-      alert('Failed to remove saved quiz. Please try again.');
-    }
-  }, [user, savedQuizDocs]);
+  }, [user, quizzes, quizCount]);
 
   const handleQuizClick = useCallback((quizId: string) => {
     navigate(`/quiz/${quizId}`);
@@ -267,17 +211,9 @@ export function QuizzesPage() {
     Promise.all([
       getUserQuizzes(user.uid, 50),
       getUserQuizCount(user.uid).catch(() => null),
-      getSavedQuizzes(user.uid).catch(err => {
-        console.error('Failed to fetch saved quizzes:', err);
-        return [] as SavedQuiz[];
-      }),
     ])
-      .then(async ([data, countResult, savedRows]) => {
-        const ownIds = new Set(data.map(q => q.id));
-        const savedOnlyIds = savedRows.map(row => row.quizId).filter(id => !ownIds.has(id));
-        const savedDocs = savedOnlyIds.length > 0 ? await getQuizzesByIds(savedOnlyIds) : [];
+      .then(([data, countResult]) => {
         setQuizzes(data);
-        setSavedQuizDocs(savedDocs);
         if (countResult !== null) {
           setQuizCount(countResult);
         }
@@ -302,6 +238,21 @@ export function QuizzesPage() {
         My Quizzes
       </h1>
       <div className="flex items-center shrink-0">
+        {/* Favorites view toggle - reveals the favorites-only section */}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="p-1.5"
+          onClick={() => setIsFavoritesView(open => !open)}
+          aria-pressed={isFavoritesView}
+          aria-label={isFavoritesView ? 'Hide favorites section' : 'Show favorites section'}
+          title={isFavoritesView ? 'Favorites shown' : 'Favorites'}
+        >
+          <Star
+            className={`w-5 h-5 ${isFavoritesView ? 'fill-yellow-400' : 'text-gray-600 dark:text-gray-300'}`}
+            aria-hidden="true"
+          />
+        </Button>
         {/* Sort control - cycles favorites-first (default) / recent */}
         <Button
           variant="ghost"
@@ -390,7 +341,7 @@ export function QuizzesPage() {
       );
     }
 
-    if (mergedQuizzes.length === 0) {
+    if (quizzes.length === 0) {
       return (
         <div className="flex-1 flex items-center justify-center px-4 py-12">
           <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">
@@ -399,7 +350,7 @@ export function QuizzesPage() {
             </div>
             <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">No Quizzes Yet</h2>
             <p className="text-gray-500 dark:text-gray-400 mb-6">
-              You haven't created any quizzes. Create your first quiz, or save public quizzes from the For You feed!
+              You haven't created any quizzes yet. Create your first quiz!
             </p>
             <Button onClick={handleCreateQuiz} className="w-full" size="lg">
               <Plus className="w-5 h-5 mr-2" aria-hidden="true" />
@@ -418,7 +369,32 @@ export function QuizzesPage() {
               No quizzes match "{searchQuery}"
             </p>
           ) : (
-            renderQuizCards(filteredQuizzes)
+            <>
+              {isFavoritesView && (
+                <section aria-label="Favorite quizzes" className="space-y-4">
+                  <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                    Favorites ({favoriteQuizzes.length})
+                  </h2>
+                  {favoriteQuizzes.length === 0 ? (
+                    <p className="text-center text-gray-500 dark:text-gray-400 py-6">
+                      No favorites yet — tap the star on a quiz card.
+                    </p>
+                  ) : (
+                    renderQuizCards(favoriteQuizzes)
+                  )}
+                </section>
+              )}
+              {mainQuizzes.length > 0 && (
+                <section aria-label="All quizzes" className="space-y-4">
+                  {isFavoritesView && (
+                    <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                      All Quizzes
+                    </h2>
+                  )}
+                  {renderQuizCards(mainQuizzes)}
+                </section>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -440,15 +416,12 @@ export function QuizzesPage() {
           progress={progress}
           colorId={colorId}
           customTitle={customTitle}
-          ownerName={quiz.createdBy !== user?.uid ? ownerNames.get(quiz.createdBy) : undefined}
           isFavorite={favoriteIds.has(quizId)}
           onQuizClick={handleQuizClick}
           onColorChange={handleColorChange}
           onTitleChange={handleTitleChange}
-          onToggleVisibility={handleToggleVisibility}
           onDelete={handleDeleteQuiz}
           onToggleFavorite={toggleFavorite}
-          onUnsave={quiz.createdBy !== user?.uid ? handleUnsave : undefined}
         />
       );
     });

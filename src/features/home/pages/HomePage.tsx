@@ -4,13 +4,9 @@ import { useAuth } from '@/features/auth/context/AuthContext';
 import {
   getUserAttempts,
   getQuizzesByIds,
-  getPublicQuizzes,
   type QuizDocument,
   type QuizProgress,
 } from '@/features/quiz';
-import { useSavedQuizzes } from '@/features/quiz/hooks/useSavedQuizzes';
-import { useUsernames } from '@/features/users';
-import { PublicQuizCard } from '@/features/quizzes/components/PublicQuizCard';
 import { UnfinishedQuizCard } from '@/features/quizzes/components/UnfinishedQuizCard';
 import { Button } from '@/shared/components/ui';
 import { Bell } from 'lucide-react';
@@ -20,7 +16,6 @@ import { NotificationContent } from '../components/NotificationContent';
 import { UserMenuContent } from '../components/UserMenuContent';
 
 const MAX_UNFINISHED = 3;
-const FEED_SIZE = 20;
 
 export function HomePage() {
   const navigate = useNavigate();
@@ -29,16 +24,8 @@ export function HomePage() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Unfinished attempts ("continue where you left off") + public feed
+  // Unfinished attempts ("continue where you left off")
   const [unfinished, setUnfinished] = useState<Array<{ quiz: QuizDocument; progress: QuizProgress }>>([]);
-  const [feedQuizzes, setFeedQuizzes] = useState<QuizDocument[]>([]);
-
-  // Save bookmarks for the For You feed
-  const { savedIds, toggleSave } = useSavedQuizzes(user?.uid);
-
-  // Resolved creator names for feed cards
-  const ownerUids = [...new Set(feedQuizzes.map(q => q.createdBy))];
-  const ownerNames = useUsernames(ownerUids);
 
   // Real initial load (replaces the old fake 600ms timer)
   useEffect(() => {
@@ -53,13 +40,7 @@ export function HomePage() {
       }
 
       try {
-        const [attempts, publicQuizzes] = await Promise.all([
-          getUserAttempts(user.uid),
-          getPublicQuizzes(FEED_SIZE).catch(err => {
-            console.error('Failed to fetch public quizzes:', err);
-            return [] as QuizDocument[];
-          }),
-        ]);
+        const attempts = await getUserAttempts(user.uid);
         if (cancelled) return;
 
         // In-progress attempts: started but not completed, newest first
@@ -79,8 +60,6 @@ export function HomePage() {
             .filter(a => quizzesById.has(a.quizId))
             .map(a => ({ quiz: quizzesById.get(a.quizId)!, progress: a }))
         );
-        // Own quizzes are already reachable from the Quizzes page
-        setFeedQuizzes(publicQuizzes.filter(q => q.createdBy !== user.uid));
       } catch (err) {
         console.error('Failed to load home data:', err);
         // Sections stay empty; the page still renders
@@ -195,27 +174,6 @@ export function HomePage() {
                 </section>
               )}
 
-              {/* For You — newest public quizzes by others */}
-              {feedQuizzes.length > 0 && (
-                <section aria-label="For You">
-                  <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
-                    For You
-                  </h2>
-                  <div className="space-y-3">
-                    {feedQuizzes.map((quiz) => (
-                      <PublicQuizCard
-                        key={quiz.id}
-                        quiz={quiz}
-                        ownerName={ownerNames.get(quiz.createdBy)}
-                        isSaved={savedIds.has(quiz.id ?? '')}
-                        showSave
-                        onToggleSave={toggleSave}
-                        onClick={handleOpenQuiz}
-                      />
-                    ))}
-                  </div>
-                </section>
-              )}
             </div>
           </main>
 

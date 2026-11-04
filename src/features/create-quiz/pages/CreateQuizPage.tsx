@@ -191,7 +191,6 @@ export function CreateQuizPage() {
   const [isEasyActive, setIsEasyActive] = useState(false);
   const [isMediumActive, setIsMediumActive] = useState(false);
   const [isHardActive, setIsHardActive] = useState(false);
-  const [isPublic, setIsPublic] = useState(false);
   const [itemCount, setItemCount] = useState<number | null>(null);
   const [topic, setTopic] = useState('');
 
@@ -448,7 +447,7 @@ export function CreateQuizPage() {
   const handleResult = async (result: GenerationResult) => {
     if (result.success && result.data && user) {
       try {
-        const quizId = await saveQuiz(result.data, user.uid, isPublic ? 'public' : 'private');
+        const quizId = await saveQuiz(result.data, user.uid);
         // Clear localStorage on successful quiz creation
         localStorage.removeItem(STORAGE_KEY);
         navigate(`/quiz/${quizId}`);
@@ -483,7 +482,6 @@ export function CreateQuizPage() {
       questionTypes: getQuestionTypes(),
       difficulties: getDifficulties(),
       itemCount,
-      isPublic,
       additionalContext: buildAdditionalContext(),
     });
 
@@ -741,49 +739,6 @@ export function CreateQuizPage() {
                   {label}
                 </button>
               ))}
-            </div>
-          </BoxContent>
-        </Box>
-
-        {/* Visibility Toggle */}
-        <Box className='border-primary-300 border-t-0'>
-          <BoxTitle className='text-text-primary'>
-              Visibility
-          </BoxTitle>
-          <BoxContent>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="flex items-center gap-1">
-                  {isPublic ? (
-                    <span className="text-base font-semibold text-primary-600 dark:text-primary-400">
-                      Public
-                    </span>
-                  ) : (
-                    <span className="text-base font-semibold text-gray-900 dark:text-gray-100">
-                      Private
-                    </span>
-                  )}
-                  <span className="text-sm text-gray-500 dark:text-gray-400">
-                    {isPublic ? '(shareable to everyone)' : '(not shareable)'}
-                  </span>
-                </span>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={isPublic}
-                  onChange={(e) => setIsPublic(e.target.checked)}
-                  className="sr-only peer outline-0"
-                />
-                <div className="relative w-12 h-7 rounded-full transition-colors duration-200
-                  peer-focus:outline-none peer-focus:ring-0 peer-focus:ring-offset-0
-                  peer-checked:bg-primary-500
-                  bg-gray-300 dark:bg-gray-600
-                " />
-                <span className="absolute left-1 top-1 w-5 h-5 rounded-full bg-white shadow-md transition-transform duration-200
-                  peer-checked:translate-x-5
-                " />
-              </label>
             </div>
           </BoxContent>
         </Box>
