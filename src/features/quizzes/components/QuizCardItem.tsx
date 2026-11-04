@@ -15,6 +15,7 @@ interface QuizCardItemProps {
   onTitleChange: (quizId: string, title: string) => void;
   onDelete: (quizId: string) => void;
   onToggleFavorite: (quizId: string) => void;
+  onShare: (quizId: string) => void;
 }
 
 /**
@@ -35,6 +36,7 @@ export const QuizCardItem = memo(function QuizCardItem({
   onTitleChange,
   onDelete,
   onToggleFavorite,
+  onShare,
 }: QuizCardItemProps) {
   const quizId = quiz.id ?? '';
 
@@ -52,6 +54,7 @@ export const QuizCardItem = memo(function QuizCardItem({
       onTitleChange={(newTitle) => onTitleChange(quizId, newTitle)}
       onDelete={() => onDelete(quizId)}
       onToggleFavorite={() => onToggleFavorite(quizId)}
+      onShare={() => onShare(quizId)}
     />
   );
 });

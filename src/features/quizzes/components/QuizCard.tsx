@@ -1,5 +1,5 @@
 import { memo, useCallback, useMemo, useState, useRef, useEffect } from 'react';
-import { ChevronDown, Edit, Users, User, HelpCircle, Target, Brain, List, Check, MoreVertical, Trash2, Star } from 'lucide-react';
+import { ChevronDown, Edit, Users, User, HelpCircle, Target, Brain, List, Check, MoreVertical, Trash2, Star, Share2 } from 'lucide-react';
 import { Card } from '@/shared/components/ui';
 import { ColorPalette } from '@/shared/components/ui/ColorPalette';
 import { useCardSwipe } from '../hooks/useCardSwipe';
@@ -20,6 +20,8 @@ interface QuizCardProps {
   /** Favorite star at the bottom-right of the card; omitted hides the star. */
   isFavorite?: boolean;
   onToggleFavorite?: (quizId: string) => void;
+  /** Opens the share-person picker; omitted hides the Share menu item. */
+  onShare?: () => void;
 }
 
 // Progress bar colors per card color. Literal class strings only — Tailwind v4
@@ -52,6 +54,7 @@ export const QuizCard = memo(function QuizCard({
   ownerName,
   isFavorite,
   onToggleFavorite,
+  onShare,
 }: QuizCardProps) {
   const isOwner = currentUserId && quiz.createdBy === currentUserId;
   const hasProgress = progress && progress.answeredCount > 0;
@@ -65,6 +68,7 @@ export const QuizCard = memo(function QuizCard({
   const [editTitle, setEditTitle] = useState('');
   const canManage = Boolean(isOwner) && Boolean(onDelete);
   const canRename = Boolean(currentUserId) && Boolean(onTitleChange);
+  const canShare = Boolean(isOwner) && Boolean(onShare);
 
   // Local state for instant UI update, synced with prop initially
   const [localColorId, setLocalColorId] = useState<CardColorId>(initialColorId);
@@ -318,7 +322,7 @@ export const QuizCard = memo(function QuizCard({
           {/* Header with Title & Author - COLORED SECTION */}
           <div className={`${cardBgClasses} ${textClasses} ${borderClasses} border-b p-4 relative`}>
             {/* Card actions: ⋯ menu for owned quizzes */}
-            {(canManage || canRename) && (
+            {(canManage || canRename || canShare) && (
               <button
                 type="button"
                 {...menuEventProps}
@@ -342,7 +346,7 @@ export const QuizCard = memo(function QuizCard({
                 <MoreVertical className="w-6 h-6" aria-hidden="true" />
               </button>
             )}
-            {(canManage || canRename) && isMenuOpen && (
+            {(canManage || canRename || canShare) && isMenuOpen && (
               <div
                 {...menuEventProps}
                 role="menu"
@@ -362,6 +366,20 @@ export const QuizCard = memo(function QuizCard({
                   >
                     <Edit className="w-4 h-4" aria-hidden="true" />
                     Rename
+                  </button>
+                )}
+                {canShare && !isConfirmingDelete && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      onShare?.();
+                      closeMenu();
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    <Share2 className="w-4 h-4" aria-hidden="true" />
+                    Share
                   </button>
                 )}
                 {canManage && onDelete && !isConfirmingDelete && (
@@ -403,7 +421,7 @@ export const QuizCard = memo(function QuizCard({
                 )}
               </div>
             )}
-            <div className={`space-y-1 ${(canManage || canRename) ? 'pr-8' : ''}`}>
+            <div className={`space-y-1 ${(canManage || canRename || canShare) ? 'pr-8' : ''}`}>
               <h3 className={`text-2xl font-semibold truncate`}>
                 {isEditingTitle ? (
                   <input

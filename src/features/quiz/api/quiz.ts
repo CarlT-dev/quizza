@@ -32,6 +32,8 @@ export interface QuizDocument {
   createdAt: Timestamp;
   updatedAt: Timestamp;
   progress?: QuizProgress;
+  /** Recipient uids this quiz was personally shared with; managed by the messages feature. */
+  sharedWith?: string[];
 }
 
 export interface QuizProgress {

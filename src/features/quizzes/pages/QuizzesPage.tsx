@@ -15,6 +15,7 @@ import { QuizCardItem } from '../components/QuizCardItem';
 import { QuizCardSkeleton } from '../components/QuizCardSkeleton';
 import { Plus, AlertTriangle, Search, X, ArrowDownUp, Star } from 'lucide-react';
 import { Button } from '@/shared/components/ui';
+import { ShareQuizPanel } from '@/features/messages';
 
 export function QuizzesPage() {
   const navigate = useNavigate();
@@ -35,6 +36,9 @@ export function QuizzesPage() {
 
   // Favorites view: reveals the favorites-only section
   const [isFavoritesView, setIsFavoritesView] = useState(false);
+
+  // Quiz currently targeted by the share panel (null = closed)
+  const [shareQuiz, setShareQuiz] = useState<QuizDocument | null>(null);
 
   // Favorite stars (quizFavorites side-documents)
   const { favoriteIds, toggleFavorite } = useQuizFavorites(user?.uid);
@@ -199,6 +203,10 @@ export function QuizzesPage() {
   const handleQuizClick = useCallback((quizId: string) => {
     navigate(`/quiz/${quizId}`);
   }, [navigate]);
+
+  const handleShareQuiz = useCallback((quizId: string) => {
+    setShareQuiz(quizzes.find(q => q.id === quizId) ?? null);
+  }, [quizzes]);
 
   const handleCreateQuiz = useCallback(() => {
     navigate('/create-quiz');
@@ -422,6 +430,7 @@ export function QuizzesPage() {
           onTitleChange={handleTitleChange}
           onDelete={handleDeleteQuiz}
           onToggleFavorite={toggleFavorite}
+          onShare={handleShareQuiz}
         />
       );
     });
@@ -434,6 +443,9 @@ export function QuizzesPage() {
       <main className="pb-20">
         {renderContent()}
       </main>
+
+      {/* Share flow: person picker for the quiz targeted from a card's ⋯ menu */}
+      <ShareQuizPanel quiz={shareQuiz} onClose={() => setShareQuiz(null)} />
     </div>
   );
 }
