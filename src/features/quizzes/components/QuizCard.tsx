@@ -1,5 +1,5 @@
 import { memo, useCallback, useMemo, useState, useRef, useEffect } from 'react';
-import { ChevronDown, Edit, Users, User, HelpCircle, Target, Brain, List, Check, MoreVertical, Trash2, Star, Share2 } from 'lucide-react';
+import { ChevronDown, Edit, Users, User, HelpCircle, Target, Brain, List, Check, MoreVertical, Trash2, Star, Share2, Trophy } from 'lucide-react';
 import { Card } from '@/shared/components/ui';
 import { ColorPalette } from '@/shared/components/ui/ColorPalette';
 import { useCardSwipe } from '../hooks/useCardSwipe';
@@ -22,6 +22,8 @@ interface QuizCardProps {
   onToggleFavorite?: (quizId: string) => void;
   /** Opens the share-person picker; omitted hides the Share menu item. */
   onShare?: () => void;
+  /** Opens the owner's results view; omitted hides the Results menu item. */
+  onViewResults?: () => void;
 }
 
 // Progress bar colors per card color. Literal class strings only — Tailwind v4
@@ -55,6 +57,7 @@ export const QuizCard = memo(function QuizCard({
   isFavorite,
   onToggleFavorite,
   onShare,
+  onViewResults,
 }: QuizCardProps) {
   const isOwner = currentUserId && quiz.createdBy === currentUserId;
   const hasProgress = progress && progress.answeredCount > 0;
@@ -69,6 +72,7 @@ export const QuizCard = memo(function QuizCard({
   const canManage = Boolean(isOwner) && Boolean(onDelete);
   const canRename = Boolean(currentUserId) && Boolean(onTitleChange);
   const canShare = Boolean(isOwner) && Boolean(onShare);
+  const canViewResults = Boolean(isOwner) && Boolean(onViewResults);
 
   // Local state for instant UI update, synced with prop initially
   const [localColorId, setLocalColorId] = useState<CardColorId>(initialColorId);
@@ -322,7 +326,7 @@ export const QuizCard = memo(function QuizCard({
           {/* Header with Title & Author - COLORED SECTION */}
           <div className={`${cardBgClasses} ${textClasses} ${borderClasses} border-b p-4 relative`}>
             {/* Card actions: ⋯ menu for owned quizzes */}
-            {(canManage || canRename || canShare) && (
+            {(canManage || canRename || canShare || canViewResults) && (
               <button
                 type="button"
                 {...menuEventProps}
@@ -346,7 +350,7 @@ export const QuizCard = memo(function QuizCard({
                 <MoreVertical className="w-6 h-6" aria-hidden="true" />
               </button>
             )}
-            {(canManage || canRename || canShare) && isMenuOpen && (
+            {(canManage || canRename || canShare || canViewResults) && isMenuOpen && (
               <div
                 {...menuEventProps}
                 role="menu"
@@ -380,6 +384,20 @@ export const QuizCard = memo(function QuizCard({
                   >
                     <Share2 className="w-4 h-4" aria-hidden="true" />
                     Share
+                  </button>
+                )}
+                {canViewResults && !isConfirmingDelete && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      onViewResults?.();
+                      closeMenu();
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    <Trophy className="w-4 h-4" aria-hidden="true" />
+                    Results
                   </button>
                 )}
                 {canManage && onDelete && !isConfirmingDelete && (
@@ -421,7 +439,7 @@ export const QuizCard = memo(function QuizCard({
                 )}
               </div>
             )}
-            <div className={`space-y-1 ${(canManage || canRename || canShare) ? 'pr-8' : ''}`}>
+            <div className={`space-y-1 ${(canManage || canRename || canShare || canViewResults) ? 'pr-8' : ''}`}>
               <h3 className={`text-2xl font-semibold truncate`}>
                 {isEditingTitle ? (
                   <input
