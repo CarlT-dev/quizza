@@ -12,7 +12,7 @@ interface UseQuizFavoritesResult {
 /**
  * Tracks the user's favorite (starred) quizzes, with optimistic toggle +
  * rollback (useQuizProgress hook pattern). Distinct from saved quizzes:
- * favoriting only marks a card for sort priority.
+ * favoriting stars a card and gathers it in the favorites section.
  */
 export function useQuizFavorites(userId: string | null | undefined): UseQuizFavoritesResult {
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());

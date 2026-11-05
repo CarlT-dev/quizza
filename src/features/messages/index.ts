@@ -8,6 +8,6 @@ export {
   type ShareDocument,
 } from './api/messages';
 
-export { ShareQuizPanel } from './components/ShareQuizPanel';
+export { ShareQuizSheet } from './components/ShareQuizSheet';
 export { MessagesPage } from './pages/MessagesPage';
 export { ConvoPage } from './pages/ConvoPage';
