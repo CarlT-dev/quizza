@@ -13,9 +13,9 @@ import { useQuizFavorites } from '@/features/quiz/hooks/useQuizFavorites';
 import { saveQuizColorPreference, type CardColorId } from '@/features/quiz/api/quiz';
 import { QuizCardItem } from '../components/QuizCardItem';
 import { QuizCardSkeleton } from '../components/QuizCardSkeleton';
-import { Plus, AlertTriangle, Search, X, ArrowDownUp, Star } from 'lucide-react';
+import { Plus, AlertTriangle, Search, X, Star } from 'lucide-react';
 import { Button } from '@/shared/components/ui';
-import { ShareQuizPanel } from '@/features/messages';
+import { ShareQuizSheet } from '@/features/messages';
 
 export function QuizzesPage() {
   const navigate = useNavigate();
@@ -30,9 +30,6 @@ export function QuizzesPage() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
-
-  // Sort order: favorites first (default) or pure recency
-  const [sortMode, setSortMode] = useState<'favorites' | 'recent'>('favorites');
 
   // Favorites view: reveals the favorites-only section
   const [isFavoritesView, setIsFavoritesView] = useState(false);
@@ -111,21 +108,7 @@ export function QuizzesPage() {
     enabled: !!user && quizIds.length > 0,
   });
 
-  // Sort: favorites first (favorites by createdAt desc, then the rest), or
-  // pure recency. Client-side sort - no composite index needed.
-  const sortedQuizzes = useMemo(() => {
-    const createdMs = (quiz: QuizDocument) => quiz.createdAt?.toMillis?.() ?? 0;
-    return [...quizzes].sort((a, b) => {
-      if (sortMode === 'favorites') {
-        const af = favoriteIds.has(a.id ?? '') ? 1 : 0;
-        const bf = favoriteIds.has(b.id ?? '') ? 1 : 0;
-        if (af !== bf) return bf - af;
-      }
-      return createdMs(b) - createdMs(a);
-    });
-  }, [quizzes, sortMode, favoriteIds]);
-
-  // Live filter by title/topic over the merged, sorted list
+  // Live filter by title/topic
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const matchesSearch = useCallback(
     (quiz: QuizDocument) =>
@@ -134,13 +117,12 @@ export function QuizzesPage() {
     [normalizedQuery]
   );
   const filteredQuizzes = useMemo(
-    () => (normalizedQuery ? sortedQuizzes.filter(matchesSearch) : sortedQuizzes),
-    [sortedQuizzes, normalizedQuery, matchesSearch]
+    () => (normalizedQuery ? quizzes.filter(matchesSearch) : quizzes),
+    [quizzes, normalizedQuery, matchesSearch]
   );
 
-  // Starred quizzes for their own section (still search-filtered, existing
-  // sorted order); while the view is shown the main list omits them so
-  // nothing appears twice.
+  // Starred quizzes for their own section (still search-filtered); while the
+  // view is shown the main list omits them so nothing appears twice.
   const favoriteQuizzes = useMemo(
     () => filteredQuizzes.filter(q => favoriteIds.has(q.id ?? '')),
     [filteredQuizzes, favoriteIds]
@@ -260,21 +242,6 @@ export function QuizzesPage() {
             className={`w-5 h-5 ${isFavoritesView ? 'fill-yellow-400' : 'text-gray-600 dark:text-gray-300'}`}
             aria-hidden="true"
           />
-        </Button>
-        {/* Sort control - cycles favorites-first (default) / recent */}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="p-1.5"
-          onClick={() => setSortMode(mode => (mode === 'favorites' ? 'recent' : 'favorites'))}
-          aria-label={
-            sortMode === 'favorites'
-              ? 'Sorted favorites first. Switch to recent'
-              : 'Sorted by recent. Switch to favorites first'
-          }
-          title={sortMode === 'favorites' ? 'Favorites first' : 'Recent'}
-        >
-          <ArrowDownUp className="w-5 h-5 text-gray-600 dark:text-gray-300" />
         </Button>
         {/* Always mounted so the width can animate; invisible keeps it out of tab order while closed */}
         <div
@@ -444,8 +411,8 @@ export function QuizzesPage() {
         {renderContent()}
       </main>
 
-      {/* Share flow: person picker for the quiz targeted from a card's ⋯ menu */}
-      <ShareQuizPanel quiz={shareQuiz} onClose={() => setShareQuiz(null)} />
+      {/* Share flow: friends picker for the quiz targeted from a card's ⋯ menu */}
+      <ShareQuizSheet quiz={shareQuiz} onClose={() => setShareQuiz(null)} />
     </div>
   );
 }

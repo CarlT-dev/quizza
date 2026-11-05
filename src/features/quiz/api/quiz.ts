@@ -79,7 +79,7 @@ export interface QuizTitle {
   updatedAt: Timestamp;
 }
 
-/** Row in quizFavorites — the star on a quiz card; drives the favorites-first sort. */
+/** Row in quizFavorites — the star on a quiz card. */
 export interface QuizFavorite {
   userId: string;
   quizId: string;
