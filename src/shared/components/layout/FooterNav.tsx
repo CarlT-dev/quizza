@@ -1,6 +1,6 @@
 import { useLocation } from 'react-router-dom';
 import { Link } from 'react-router-dom';
-import { Home, BookOpen, PlusCircle, User, Settings } from 'lucide-react';
+import { Home, Search, BookOpen, MessageCircle, BarChart3 } from 'lucide-react';
 
 interface NavItem {
   path: string;
@@ -10,10 +10,10 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { path: '/', icon: Home, label: 'Home' },
+  { path: '/search', icon: Search, label: 'Search' },
   { path: '/quizzes', icon: BookOpen, label: 'Quizzes' },
-  { path: '/create-quiz', icon: PlusCircle, label: 'Create' },
-  { path: '/profile', icon: User, label: 'Profile' },
-  { path: '/settings', icon: Settings, label: 'Settings' },
+  { path: '/messages', icon: MessageCircle, label: 'Messages' },
+  { path: '/status', icon: BarChart3, label: 'Status' },
 ];
 
 export function FooterNav() {
@@ -32,7 +32,7 @@ export function FooterNav() {
             <Link
               key={item.path}
               to={item.path}
-              className={`flex flex-col items-center gap-1 px-3 py-2 transition-colors ${
+              className={`flex flex-col items-center gap-1 px-2 py-2 transition-colors ${
                 isActive
                   ? 'text-primary-500'
                   : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'

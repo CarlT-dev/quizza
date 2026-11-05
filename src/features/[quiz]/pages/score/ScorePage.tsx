@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ChevronLeft, Award, ArrowRight, Home, AlertTriangle, Sparkles } from 'lucide-react';
 import { Card, CardContent } from '@/shared/components/ui';
-import { getQuizById, saveQuizProgress } from '@/features/quiz';
+import { getQuizById, saveQuizProgress, recordFirstCompletion, updateUserStatsFromAttempts } from '@/features/quiz';
 import { useAuth } from '@/features/auth';
 import type { QuizDocument } from '@/features/quiz/api/quiz';
 import type { QuizQuestion } from '@/features/genai/schema';
@@ -115,14 +115,34 @@ export function ScorePage() {
           // point (the !state?.answers guard above routes them to the error card),
           // and StrictMode's double-run is idempotent (merge with identical payload).
           if (user) {
-            saveQuizProgress(quizId, user.uid, {
+            const firstScore = { correct: score.correct, total: score.total };
+            const progressPayload = {
               answeredCount: quiz.questions.length,
               totalQuestions: quiz.questions.length,
               completed: true,
-              score: { correct: score.correct, total: score.total },
+              score: firstScore,
               answers: state.answers,
               details: score.details,
-            }).catch(err => console.error('Failed to save progress:', err));
+            };
+
+            // Capture the first-take score in a transaction BEFORE the completed
+            // save merges completed:true — once that lands, retakes and legacy
+            // docs would be indistinguishable. The progress save must survive a
+            // stats-layer failure, hence the fallback in the catch.
+            recordFirstCompletion(quizId, user.uid, firstScore)
+              .then(isFirst => {
+                saveQuizProgress(quizId, user.uid, progressPayload)
+                  .catch(err => console.error('Failed to save progress:', err));
+                if (isFirst) {
+                  updateUserStatsFromAttempts(user.uid)
+                    .catch(err => console.error('Failed to update user stats:', err));
+                }
+              })
+              .catch(err => {
+                console.error('Failed to record first completion:', err);
+                saveQuizProgress(quizId, user.uid, progressPayload)
+                  .catch(saveErr => console.error('Failed to save progress:', saveErr));
+              });
           }
         } else {
           setError('Quiz not found');
@@ -148,7 +168,7 @@ export function ScorePage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-primary-50/10 dark:bg-gray-900 flex items-center justify-center">
+      <div className="flex-1 bg-primary-50/10 dark:bg-gray-900 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="w-10 h-10 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
           <p className="text-gray-500 dark:text-gray-400">Calculating your score...</p>
@@ -159,7 +179,7 @@ export function ScorePage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-primary-50/10 dark:bg-gray-900 flex items-center justify-center px-4">
+      <div className="flex-1 bg-primary-50/10 dark:bg-gray-900 flex items-center justify-center px-4">
         <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl border border-red-200 dark:border-red-800 p-8 text-center">
           <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Unable to Load Results</h2>
@@ -177,7 +197,7 @@ export function ScorePage() {
 
   if (!quizData || !scoreData) {
     return (
-      <div className="min-h-screen bg-primary-50/10 dark:bg-gray-900 flex items-center justify-center px-4">
+      <div className="flex-1 bg-primary-50/10 dark:bg-gray-900 flex items-center justify-center px-4">
         <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl border border-red-200 dark:border-red-800 p-8 text-center">
           <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Score Not Available</h2>
@@ -197,7 +217,7 @@ export function ScorePage() {
   const isPassing = percentage >= 60;
 
   return (
-    <div className="min-h-screen bg-primary-50/10 dark:bg-gray-900 flex flex-col">
+    <div className="flex-1 bg-primary-50/10 dark:bg-gray-900 flex flex-col">
       {/* Header */}
       <header className="fixed inset-x-0 top-0 z-10 max-w-[500px] mx-auto bg-gradient-to-r from-primary-500 to-primary-600 rounded-b-3xl px-4 pb-4">
         <button

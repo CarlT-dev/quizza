@@ -1,13 +1,21 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth';
-import { getUserQuizzes, getUserQuizCount, getPublicQuizzes, updateQuizVisibility, deleteQuiz, saveQuizTitle, type QuizDocument } from '@/features/quiz';
+import {
+  getUserQuizzes,
+  getUserQuizCount,
+  deleteQuiz,
+  saveQuizTitle,
+  type QuizDocument,
+} from '@/features/quiz';
 import { useQuizProgress } from '@/features/quiz/hooks/useQuizProgress';
+import { useQuizFavorites } from '@/features/quiz/hooks/useQuizFavorites';
 import { saveQuizColorPreference, type CardColorId } from '@/features/quiz/api/quiz';
-import { QuizCard } from '../components/QuizCard';
+import { QuizCardItem } from '../components/QuizCardItem';
 import { QuizCardSkeleton } from '../components/QuizCardSkeleton';
-import { Plus, AlertTriangle, Search, X } from 'lucide-react';
+import { Plus, AlertTriangle, Search, X, Star } from 'lucide-react';
 import { Button } from '@/shared/components/ui';
+import { ShareQuizSheet } from '@/features/messages';
 
 export function QuizzesPage() {
   const navigate = useNavigate();
@@ -23,14 +31,16 @@ export function QuizzesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Discover tab - lazy fetch of public quizzes
-  const [activeTab, setActiveTab] = useState<'mine' | 'discover'>('mine');
-  const [discoverQuizzes, setDiscoverQuizzes] = useState<QuizDocument[]>([]);
-  const [discoverLoading, setDiscoverLoading] = useState(false);
-  const [discoverError, setDiscoverError] = useState<string | null>(null);
-  const discoverLoadedRef = useRef(false);
+  // Favorites view: reveals the favorites-only section
+  const [isFavoritesView, setIsFavoritesView] = useState(false);
 
-  // Fetch user's quizzes
+  // Quiz currently targeted by the share panel (null = closed)
+  const [shareQuiz, setShareQuiz] = useState<QuizDocument | null>(null);
+
+  // Favorite stars (quizFavorites side-documents)
+  const { favoriteIds, toggleFavorite } = useQuizFavorites(user?.uid);
+
+  // Fetch the user's quizzes
   useEffect(() => {
     if (authLoading) return;
 
@@ -46,7 +56,7 @@ export function QuizzesPage() {
       try {
         setIsLoading(true);
         setError(null);
-        // Fetch quizzes and count in parallel (count drives skeleton amount)
+        // Fetch quizzes and count (drives skeleton amount) in parallel
         const [userQuizzes, countResult] = await Promise.all([
           getUserQuizzes(user.uid, 50),
           getUserQuizCount(user.uid).catch(() => null),
@@ -84,16 +94,11 @@ export function QuizzesPage() {
     }
   }, [isSearchOpen]);
 
-  // Quiz IDs for progress/color fetching (Mine + Discover, deduped).
+  // Quiz IDs for progress/color fetching.
   // Fresh array each memo - useQuizProgress sorts its copy in place.
   const quizIds = useMemo(
-    () => [
-      ...new Set([
-        ...quizzes.map(q => q.id!).filter(Boolean),
-        ...discoverQuizzes.map(q => q.id!),
-      ]),
-    ],
-    [quizzes, discoverQuizzes]
+    () => [...new Set(quizzes.map(q => q.id!).filter(Boolean))],
+    [quizzes]
   );
 
   // Fetch progress and color preferences
@@ -103,7 +108,7 @@ export function QuizzesPage() {
     enabled: !!user && quizIds.length > 0,
   });
 
-  // Live filter by title/topic - applies to whichever tab's list is visible
+  // Live filter by title/topic
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const matchesSearch = useCallback(
     (quiz: QuizDocument) =>
@@ -116,14 +121,17 @@ export function QuizzesPage() {
     [quizzes, normalizedQuery, matchesSearch]
   );
 
-  // Discover list without the user's own quizzes (they are already in Mine)
-  const visibleDiscover = useMemo(
-    () => discoverQuizzes.filter(q => q.createdBy !== user?.uid),
-    [discoverQuizzes, user]
+  // Starred quizzes for their own section (still search-filtered); while the
+  // view is shown the main list omits them so nothing appears twice.
+  const favoriteQuizzes = useMemo(
+    () => filteredQuizzes.filter(q => favoriteIds.has(q.id ?? '')),
+    [filteredQuizzes, favoriteIds]
   );
-  const filteredDiscover = useMemo(
-    () => (normalizedQuery ? visibleDiscover.filter(matchesSearch) : visibleDiscover),
-    [visibleDiscover, normalizedQuery, matchesSearch]
+  const mainQuizzes = useMemo(
+    () => (isFavoritesView
+      ? filteredQuizzes.filter(q => !favoriteIds.has(q.id ?? ''))
+      : filteredQuizzes),
+    [filteredQuizzes, isFavoritesView, favoriteIds]
   );
 
   // Handle color change
@@ -158,25 +166,6 @@ export function QuizzesPage() {
     }
   }, [user, refetchProgress, updateTitle]);
 
-  // Quiz management: optimistic update with rollback on failure
-  const handleToggleVisibility = useCallback(async (quizId: string) => {
-    if (!user) return;
-    const prev = quizzes;
-    const target = prev.find(q => q.id === quizId);
-    if (!target) return;
-    const newVisibility = target.visibility === 'public' ? 'private' : 'public';
-    setQuizzes(prevQuizzes =>
-      prevQuizzes.map(q => (q.id === quizId ? { ...q, visibility: newVisibility } : q))
-    );
-    try {
-      await updateQuizVisibility(quizId, newVisibility);
-    } catch (err) {
-      console.error('Failed to update visibility:', err);
-      setQuizzes(prev);
-      alert('Failed to update visibility. Please try again.');
-    }
-  }, [user, quizzes]);
-
   const handleDeleteQuiz = useCallback(async (quizId: string) => {
     if (!user) return;
     const prev = quizzes;
@@ -193,69 +182,37 @@ export function QuizzesPage() {
     }
   }, [user, quizzes, quizCount]);
 
-  // Discover: fetch public quizzes. First activation shows skeletons; later
-  // activations refresh silently (stale-while-revalidate) so the old list
-  // stays visible and no loading state can flash onto the Mine tab.
-  const fetchDiscover = useCallback(async () => {
-    try {
-      const publicQuizzes = await getPublicQuizzes(20);
-      setDiscoverQuizzes(publicQuizzes);
-      setDiscoverError(null);
-      discoverLoadedRef.current = true;
-    } catch (err) {
-      console.error('Failed to fetch public quizzes:', err);
-      // Keep any previously loaded list visible; only surface the error when
-      // there is no data to show (first activation / after a retry failure)
-      if (!discoverLoadedRef.current) {
-        setDiscoverError('Failed to load public quizzes. Please try again.');
-      }
-    }
-  }, []);
-
-  const activateDiscover = () => {
-    if (!discoverLoadedRef.current) {
-      setDiscoverLoading(true);
-      fetchDiscover().finally(() => setDiscoverLoading(false));
-    } else {
-      fetchDiscover();
-    }
-  };
-
-  const handleTabChange = (tab: 'mine' | 'discover') => {
-    setActiveTab(tab);
-    if (tab === 'discover') {
-      activateDiscover();
-    }
-  };
-
-  const handleQuizClick = (quizId: string) => {
+  const handleQuizClick = useCallback((quizId: string) => {
     navigate(`/quiz/${quizId}`);
-  };
+  }, [navigate]);
 
-  const handleCreateQuiz = () => {
+  const handleShareQuiz = useCallback((quizId: string) => {
+    setShareQuiz(quizzes.find(q => q.id === quizId) ?? null);
+  }, [quizzes]);
+
+  const handleCreateQuiz = useCallback(() => {
     navigate('/create-quiz');
-  };
+  }, [navigate]);
 
   const handleRetry = () => {
-    if (user) {
-      setIsLoading(true);
-      setError(null);
-      Promise.all([
-        getUserQuizzes(user.uid, 50),
-        getUserQuizCount(user.uid).catch(() => null),
-      ])
-        .then(([data, countResult]) => {
-          setQuizzes(data);
-          if (countResult !== null) {
-            setQuizCount(countResult);
-          }
-        })
-        .catch(err => {
-          console.error('Failed to fetch quizzes:', err);
-          setError('Failed to load quizzes. Please try again.');
-        })
-        .finally(() => setIsLoading(false));
-    }
+    if (!user) return;
+    setIsLoading(true);
+    setError(null);
+    Promise.all([
+      getUserQuizzes(user.uid, 50),
+      getUserQuizCount(user.uid).catch(() => null),
+    ])
+      .then(([data, countResult]) => {
+        setQuizzes(data);
+        if (countResult !== null) {
+          setQuizCount(countResult);
+        }
+      })
+      .catch(err => {
+        console.error('Failed to fetch quizzes:', err);
+        setError('Failed to load quizzes. Please try again.');
+      })
+      .finally(() => setIsLoading(false));
   };
 
   // Shared header for all states - search replaces the old (404) settings button
@@ -268,9 +225,24 @@ export function QuizzesPage() {
   const renderHeader = () => (
     <header className="flex items-center justify-between px-4 py-3 mb-4 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
       <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100 flex-1 min-w-0 truncate">
-        {activeTab === 'mine' ? 'My Quizzes' : 'Discover'}
+        My Quizzes
       </h1>
       <div className="flex items-center shrink-0">
+        {/* Favorites view toggle - reveals the favorites-only section */}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="p-1.5"
+          onClick={() => setIsFavoritesView(open => !open)}
+          aria-pressed={isFavoritesView}
+          aria-label={isFavoritesView ? 'Hide favorites section' : 'Show favorites section'}
+          title={isFavoritesView ? 'Favorites shown' : 'Favorites'}
+        >
+          <Star
+            className={`w-5 h-5 ${isFavoritesView ? 'fill-yellow-400' : 'text-gray-600 dark:text-gray-300'}`}
+            aria-hidden="true"
+          />
+        </Button>
         {/* Always mounted so the width can animate; invisible keeps it out of tab order while closed */}
         <div
           className={`flex items-center overflow-hidden transition-all duration-300 motion-reduce:transition-none ${
@@ -313,12 +285,11 @@ export function QuizzesPage() {
     </header>
   );
 
-  // Single-return layout: the header (and later tabs/search) persists across
-  // loading, error, empty and list states. Content classes match the previous
-  // per-state returns exactly.
+  // Single-return layout: the header persists across loading, error, empty and
+  // list states. Content classes match the previous per-state returns exactly.
   const showSkeletons = authLoading || isLoading || progressLoading;
 
-  const renderMineContent = () => {
+  const renderContent = () => {
     if (showSkeletons) {
       return (
         <div className="max-w-[500px] mx-auto px-4 space-y-4">
@@ -354,7 +325,7 @@ export function QuizzesPage() {
             </div>
             <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">No Quizzes Yet</h2>
             <p className="text-gray-500 dark:text-gray-400 mb-6">
-              You haven't created any quizzes. Start building your first quiz now!
+              You haven't created any quizzes yet. Create your first quiz!
             </p>
             <Button onClick={handleCreateQuiz} className="w-full" size="lg">
               <Plus className="w-5 h-5 mr-2" aria-hidden="true" />
@@ -373,124 +344,75 @@ export function QuizzesPage() {
               No quizzes match "{searchQuery}"
             </p>
           ) : (
-            renderQuizCards(filteredQuizzes)
+            <>
+              {isFavoritesView && (
+                <section aria-label="Favorite quizzes" className="space-y-4">
+                  <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                    Favorites ({favoriteQuizzes.length})
+                  </h2>
+                  {favoriteQuizzes.length === 0 ? (
+                    <p className="text-center text-gray-500 dark:text-gray-400 py-6">
+                      No favorites yet — tap the star on a quiz card.
+                    </p>
+                  ) : (
+                    renderQuizCards(favoriteQuizzes)
+                  )}
+                </section>
+              )}
+              {mainQuizzes.length > 0 && (
+                <section aria-label="All quizzes" className="space-y-4">
+                  {isFavoritesView && (
+                    <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                      All Quizzes
+                    </h2>
+                  )}
+                  {renderQuizCards(mainQuizzes)}
+                </section>
+              )}
+            </>
           )}
         </div>
       </div>
     );
   };
 
-  // Shared card renderer for both tabs
   const renderQuizCards = (list: QuizDocument[]) =>
     list.map((quiz) => {
+      const quizId = quiz.id ?? '';
       const progress = quiz.id ? progressMap.get(quiz.id) || null : null;
       const colorId = quiz.id ? colorPrefsMap.get(quiz.id) || 'default' : 'default';
       const customTitle = quiz.id ? titlePrefsMap.get(quiz.id) || quiz.title : quiz.title;
 
       return (
-        <QuizCard
+        <QuizCardItem
           key={quiz.id}
           quiz={quiz}
           currentUserId={user?.uid}
           progress={progress}
           colorId={colorId}
           customTitle={customTitle}
-          onClick={() => handleQuizClick(quiz.id!)}
-          onColorChange={(newColorId) => handleColorChange(quiz.id!, newColorId)}
-          onTitleChange={(newTitle) => handleTitleChange(quiz.id!, newTitle)}
-          onToggleVisibility={() => handleToggleVisibility(quiz.id!)}
-          onDelete={() => handleDeleteQuiz(quiz.id!)}
+          isFavorite={favoriteIds.has(quizId)}
+          onQuizClick={handleQuizClick}
+          onColorChange={handleColorChange}
+          onTitleChange={handleTitleChange}
+          onDelete={handleDeleteQuiz}
+          onToggleFavorite={toggleFavorite}
+          onShare={handleShareQuiz}
         />
       );
     });
 
-  const renderDiscoverContent = () => {
-    if (discoverLoading && discoverQuizzes.length === 0) {
-      return (
-        <div className="max-w-[500px] mx-auto px-4 space-y-4">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <QuizCardSkeleton key={i} />
-          ))}
-        </div>
-      );
-    }
-
-    if (discoverError) {
-      return (
-        <div className="flex-1 flex items-center justify-center px-4 py-12">
-          <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl border border-red-200 dark:border-red-800 p-8 text-center">
-            <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Unable to Load Public Quizzes</h2>
-            <p className="text-gray-500 dark:text-gray-400 mb-6">{discoverError}</p>
-            <Button onClick={activateDiscover} className="w-full">
-              Try Again
-            </Button>
-          </div>
-        </div>
-      );
-    }
-
-    if (filteredDiscover.length === 0) {
-      return (
-        <div className="flex-1 flex items-center justify-center px-4 py-12">
-          <p className="text-gray-500 dark:text-gray-400 text-center">
-            {normalizedQuery
-              ? `No quizzes match "${searchQuery}"`
-              : 'No public quizzes yet. Check back soon!'}
-          </p>
-        </div>
-      );
-    }
-
-    return (
-      <div className="px-4">
-        <div className="max-w-[500px] mx-auto space-y-4">
-          {renderQuizCards(filteredDiscover)}
-        </div>
-      </div>
-    );
-  };
-
   return (
-    <div className="min-h-screen bg-primary-50/30 dark:bg-gray-900">
+    <div className="flex-1 bg-primary-50/30 dark:bg-gray-900">
       {renderHeader()}
 
       {/* Content */}
       <main className="pb-20">
-        {/* Tabs - persist across all content states */}
-        <div className="max-w-[500px] mx-auto px-4" role="tablist" aria-label="Quiz lists">
-          <div className="grid grid-cols-2 gap-1 rounded-xl bg-gray-100 dark:bg-gray-800 p-1 mb-4">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === 'mine'}
-              onClick={() => handleTabChange('mine')}
-              className={`rounded-lg py-2 text-sm font-medium transition-colors motion-reduce:transition-none ${
-                activeTab === 'mine'
-                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-              }`}
-            >
-              My Quizzes
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === 'discover'}
-              onClick={() => handleTabChange('discover')}
-              className={`rounded-lg py-2 text-sm font-medium transition-colors motion-reduce:transition-none ${
-                activeTab === 'discover'
-                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-              }`}
-            >
-              Discover
-            </button>
-          </div>
-        </div>
-
-        {activeTab === 'mine' ? renderMineContent() : renderDiscoverContent()}
+        {renderContent()}
       </main>
+
+      {/* Share flow: friends picker for the quiz targeted from a card's ⋯ menu */}
+      <ShareQuizSheet quiz={shareQuiz} onClose={() => setShareQuiz(null)} />
     </div>
   );
 }

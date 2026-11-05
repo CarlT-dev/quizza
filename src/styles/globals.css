@@ -41,12 +41,18 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
+  /* Track the visible viewport (dvh) — 100vh alone is the *largest* viewport,
+     so mobile browser chrome (URL bar) always left a dead scrollable strip. */
+  min-height: 100dvh;
   color: inherit;
 }
 
 #root {
   width: 100%;
   min-height: 100vh;
+  /* Same dvh fallback pattern as body — either one left at 100vh alone
+     would keep forcing the document to the large-viewport height. */
+  min-height: 100dvh;
 }
 
 /* Custom loading animations */
@@ -128,6 +134,25 @@ body {
   }
 }
 
+/* Bottom sheet: slides up from the bottom edge, exits back down */
+@keyframes slide-in-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-out-down {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(100%);
+  }
+}
+
 @keyframes fade-out {
   from {
     opacity: 1;
@@ -159,6 +184,14 @@ body {
 
 .animate-fade-out {
   animation: fade-out 150ms ease-in both;
+}
+
+.animate-slide-in-up {
+  animation: slide-in-up 300ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.animate-slide-out-down {
+  animation: slide-out-down 300ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 /* Skeleton shimmer (used by loading placeholders) */
@@ -196,6 +229,8 @@ body {
   .animate-slide-in-left,
   .animate-slide-out-left,
   .animate-slide-out-right,
+  .animate-slide-in-up,
+  .animate-slide-out-down,
   .animate-fade-in,
   .animate-fade-out,
   .skeleton,

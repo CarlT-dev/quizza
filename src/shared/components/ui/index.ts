@@ -5,3 +5,5 @@ export { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 export { Box } from './Box';
 export { PageTransition, AnimatePage } from './PageTransition';
 export { SlidePanel } from './SlidePanel';
+export { BottomSheet } from './BottomSheet';
+export { StatTile } from './StatTile';

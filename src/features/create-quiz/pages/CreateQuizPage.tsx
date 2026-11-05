@@ -1,7 +1,7 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useReducer } from 'react';
 import { flushSync } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Upload, X, Loader2, AlertCircle, FileText } from 'lucide-react';
+import { ChevronLeft, Upload, X, Loader2, AlertCircle, FileText, CopyCheck } from 'lucide-react';
 import { Button } from '@/shared/components/ui';
 import { Card, CardTitle } from '@/shared/components/ui';
 import { Box, BoxTitle, BoxContent } from '@/shared/components/ui/Box';
@@ -10,9 +10,104 @@ import type { GenerationResult } from '@/features/genai';
 import { createQuizRequest } from '@/features/genai/schema';
 import { useAuth } from '@/features/auth';
 import { saveQuiz } from '@/features/quiz';
-import { extractTextFromFile, DocExtractError, MAX_CONTEXT_CHARS } from '@/features/doc-extract';
+import { extractTextFromFile, DocExtractError } from '@/features/doc-extract';
 
 const STORAGE_KEY = 'quizza_uploaded_file';
+
+let attachmentCounter = 0;
+/** Unique per-attachment id (React key + row updates). Module-level: never called during render. */
+const nextAttachmentId = () => `att-${(attachmentCounter += 1)}`;
+
+// Attachments: several files can be uploaded at once. Each is extracted
+// independently (pluggable per format — adding PPTX later means one more
+// adapter file, no page changes). Files that fail to read, or that would
+// push the combined extracted text past the character limit, are
+// "neglected": they show an error and contribute nothing to generation.
+type AttachmentStatus = 'extracting' | 'done' | 'failed' | 'rejected';
+type Attachment = {
+  id: string;
+  name: string;
+  status: AttachmentStatus;
+  progress: number;
+  text?: string; // sanitized extracted text (done only)
+  originalLength?: number; // sanitized length (done only)
+  error?: string; // failed/rejected message
+};
+
+// Combined extracted-text budget across accepted attachments (decided in
+// selection order): the file that would push the total past this limit is
+// neglected with an error instead of being silently truncated.
+const MAX_TOTAL_CONTEXT_CHARS = 10_000;
+
+// Every attachment transition is a pure reducer action. The 10,000-char
+// budget is DERIVED at decision time (sum of accepted rows), so removing
+// a row mid-flight or uploading a second batch can never desync it from
+// the "total across all accepted files" requirement.
+//
+// These live at module scope, NOT inside the component: React calls the
+// reducer from inside the useReducer() call while draining queued actions,
+// so anything it closes over must be initialized before the component body
+// runs — a later-declared const in the component was a temporal-dead-zone
+// crash the moment files finished extracting.
+type AttachmentAction =
+  | { type: 'add-batch'; batch: Attachment[] }
+  | { type: 'progress'; id: string; progress: number }
+  | { type: 'fail'; id: string; error: string }
+  | { type: 'decide'; id: string; name: string; text: string; originalLength: number }
+  | { type: 'remove'; id: string }
+  | { type: 'restore'; attachments: Attachment[] };
+
+const acceptedChars = (rows: Attachment[]): number =>
+  rows.reduce(
+    (sum, a) =>
+      a.status === 'done' && typeof a.originalLength === 'number'
+        ? sum + a.originalLength
+        : sum,
+    0
+  );
+
+function attachmentsReducer(state: Attachment[], action: AttachmentAction): Attachment[] {
+  switch (action.type) {
+    case 'add-batch':
+      return [...state, ...action.batch];
+    case 'progress':
+      return state.map((a) =>
+        a.id === action.id && a.status === 'extracting' ? { ...a, progress: action.progress } : a
+      );
+    case 'fail':
+      return state.map((a) =>
+        a.id === action.id && a.status === 'extracting'
+          ? { ...a, status: 'failed', progress: 100, error: action.error }
+          : a
+      );
+    case 'decide': {
+      const target = state.find((a) => a.id === action.id);
+      if (!target || target.status !== 'extracting') return state;
+      const used = acceptedChars(state);
+      if (used + action.originalLength > MAX_TOTAL_CONTEXT_CHARS) {
+        return state.map((a) =>
+          a.id === action.id
+            ? {
+                ...a,
+                status: 'rejected',
+                progress: 100,
+                error: `"${action.name}" needs ${action.originalLength.toLocaleString()} characters but the ${MAX_TOTAL_CONTEXT_CHARS.toLocaleString()}-character limit is reached (${used.toLocaleString()} already used). Skipped.`,
+              }
+            : a
+        );
+      }
+      return state.map((a) =>
+        a.id === action.id
+          ? { ...a, status: 'done', progress: 100, text: action.text, originalLength: action.originalLength }
+          : a
+      );
+    }
+    case 'remove':
+      return state.filter((a) => a.id !== action.id);
+    case 'restore':
+      return action.attachments;
+  }
+}
 
 // Local reusable capsule tab component
 function TabButton({
@@ -35,7 +130,7 @@ function TabButton({
       onClick={isActive ? undefined : onActivate}
       onKeyDown={handleKeyDown}
       className={`
-        group relative inline-flex items-center justify-center pl-4 pr-10 py-2 h-10 rounded-full
+        group relative inline-flex items-center justify-center pl-3 pr-10 py-1 h-10 rounded-full
         text-sm font-medium transition-all duration-200 whitespace-nowrap overflow-hidden text-ellipsis
         border-2 bg-white select-none flex-shrink-0
         ${isActive
@@ -46,7 +141,7 @@ function TabButton({
       aria-pressed={isActive}
       aria-disabled={isActive}
     >
-      <span className="truncate">{text}</span>
+      <span className="text-xs truncate">{text}</span>
       {onClose && (
         <button
           type="button"
@@ -67,6 +162,23 @@ function TabButton({
   );
 }
 
+// Select-all toggle for section headers (Question Type, Difficulty)
+function SelectAllButton({ label, isAllSelected, onToggle }: {
+  label: string; isAllSelected: boolean; onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-label={label}
+      aria-pressed={isAllSelected}
+      className="cursor-pointer p-1 -m-1 rounded-md transition-colors hover:text-primary-400 dark:hover:text-primary-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500"
+    >
+      <CopyCheck className="w-5 h-5" strokeWidth={1.5} aria-hidden="true" />
+    </button>
+  );
+}
+
 export function CreateQuizPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -79,40 +191,63 @@ export function CreateQuizPage() {
   const [isEasyActive, setIsEasyActive] = useState(false);
   const [isMediumActive, setIsMediumActive] = useState(false);
   const [isHardActive, setIsHardActive] = useState(false);
-  const [isPublic, setIsPublic] = useState(false);
   const [itemCount, setItemCount] = useState<number | null>(null);
   const [topic, setTopic] = useState('');
-  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
-
-  // Document extraction state (client-side, pluggable per format — adding
-  // PPTX later means one more adapter file, no page changes).
-  type ExtractionState =
-    | { phase: 'idle' }
-    | { phase: 'extracting'; progress: number }
-    | { phase: 'done'; text: string; truncated: boolean }
-    | { phase: 'failed'; message: string };
 
   // Fewer than this many characters is not enough context; fall back to
   // topic-only generation.
   const MIN_CONTEXT_CHARS = 200;
 
-  const [extraction, setExtraction] = useState<ExtractionState>({ phase: 'idle' });
+  // Attachment list. The types, the 10,000-char constant, and the reducer
+  // itself live at module scope: React calls the reducer from inside the
+  // useReducer() call while draining queued actions, so it must not close
+  // over anything declared later in this component (that was a runtime
+  // temporal-dead-zone crash).
+  const [attachments, dispatch] = useReducer(attachmentsReducer, []);
 
-  // Load persisted file from localStorage on mount
+  // Persist attachment names only — the documents themselves are never
+  // stored locally.
+  const persistAttachmentNames = (all: Attachment[]) => {
+    try {
+      if (all.length === 0) {
+        localStorage.removeItem(STORAGE_KEY);
+      } else {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ filenames: all.map((a) => a.name) }));
+      }
+    } catch {
+      // Ignore quota exceeded errors
+    }
+  };
+
+  // Load persisted attachment names from localStorage on mount (names only —
+  // the documents themselves are never stored, so restored rows contribute
+  // no context). Accepts the previous single-file storage shape.
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const { filename } = JSON.parse(stored);
-        setUploadedFileName(filename);
-        // Extract clean topic from filename
-        const cleanTopic = filename
-          .replace(/\.[^/.]+$/, '')
-          .replace(/[-_]/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim();
-        setTopic(cleanTopic || filename);
-      }
+      if (!stored) return;
+      const parsed = JSON.parse(stored) as { filename?: string; filenames?: string[] };
+      const filenames = parsed.filenames ?? (parsed.filename ? [parsed.filename] : []);
+      if (filenames.length === 0) return;
+      // 'restore' REPLACES the whole list, so StrictMode's double-mounted
+      // effect cannot stack duplicate rows (the second run overwrites the first).
+      dispatch({
+        type: 'restore',
+        attachments: filenames.map((name) => ({
+          id: nextAttachmentId(),
+          name,
+          status: 'done' as const,
+          progress: 100,
+        })),
+      });
+      // Extract clean topic from the first filename
+      const first = filenames[0];
+      const cleanTopic = first
+        .replace(/\.[^/.]+$/, '')
+        .replace(/[-_]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      setTopic(cleanTopic || first);
     } catch {
       // Ignore corrupted localStorage
     }
@@ -154,82 +289,104 @@ export function CreateQuizPage() {
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files ?? []);
+    // Reset so selecting the same file(s) again re-fires onChange.
+    e.target.value = '';
+    if (files.length === 0) return;
 
-    setUploadedFileName(file.name);
-    setTopic(topicFromFileName(file.name));
-    // Persist filename only — the document itself is never stored locally.
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ filename: file.name }));
-    } catch {
-      // Ignore quota exceeded errors
-    }
+    const batch = files.map((file) => ({
+      id: nextAttachmentId(),
+      name: file.name,
+      status: 'extracting' as const,
+      progress: 0,
+    }));
 
-    void runExtraction(file);
+    // The first file of the batch sets the topic (today's overwrite-on-upload
+    // behavior, applied once per batch); later files never clobber it.
+    setTopic(topicFromFileName(files[0].name));
+
+    // Force the "extracting" rows to render synchronously BEFORE any async
+    // work begins (React 19 would otherwise batch them with the eventual
+    // done/failed updates, so the user might never see "Reading document…").
+    flushSync(() => {
+      dispatch({ type: 'add-batch', batch });
+    });
+    persistAttachmentNames([...attachments, ...batch]);
+
+    void runBatch(files, batch.map((b) => b.id));
   };
 
-  const runExtraction = async (file: File) => {
-    const startTime = Date.now();
-
-    // Force the extracting state to render synchronously BEFORE any async
-    // work begins. Without this, React 19 batches the 'extracting' update
-    // together with the eventual 'done'/'failed' update, so the user never
-    // sees the intermediate "Reading document..." state.
-    flushSync(() => {
-      setExtraction({ phase: 'extracting', progress: 0 });
-    });
-
-    // Yield to the browser so the "extracting" UI paints before extraction
-    // begins. Without this, a fast extraction failure can replace "extracting"
-    // with "failed" before the browser gets a chance to paint, so the user
-    // never sees the "Reading document..." intermediate state.
+  // Extract all files of a batch in parallel (each updates only its own row),
+  // then decide acceptance in selection order. The reducer derives the used
+  // budget from the LIVE attachment state at each decision, so accepted files
+  // from earlier batches always count toward the total, removing a row
+  // mid-flight frees its room (that row's decision no-ops), and a second
+  // picker selection cannot start from a fresh budget. Files that fail to
+  // read are marked failed immediately by extractAttachment and consume no
+  // budget.
+  const runBatch = async (files: File[], ids: string[]) => {
+    // Yield so the "extracting" rows paint before extraction begins — a fast
+    // result could otherwise replace them before the browser paints.
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    // Simulated progress while extraction is in flight. extractTextFromFile is
-    // a black box with no progress callbacks, so we drive a client-side timer
-    // from 0% up to ~90%, then jump to 100% when extraction completes.
+    const outcomes = files.map((file, i) => extractAttachment(ids[i], file));
+
+    for (let i = 0; i < files.length; i++) {
+      const outcome = await outcomes[i];
+      if (!outcome.ok) continue; // already marked failed on its row
+
+      dispatch({
+        type: 'decide',
+        id: ids[i],
+        name: files[i].name,
+        text: outcome.result.text,
+        originalLength: outcome.result.originalLength,
+      });
+    }
+  };
+
+  // Extract one file: simulated progress on its own attachment row, then the
+  // real result. Read failures are marked on the row immediately (with the
+  // same ~300ms minimum so "Reading document…" is always visible).
+  const extractAttachment = async (attachmentId: string, file: File) => {
+    const startTime = Date.now();
+
     let progress = 0;
     const timer = setInterval(() => {
       progress = Math.min(progress + 10, 90);
-      setExtraction((prev) =>
-        prev.phase === 'extracting' ? { ...prev, progress } : prev
-      );
+      dispatch({ type: 'progress', id: attachmentId, progress });
     }, 150);
 
     try {
       const result = await extractTextFromFile(file);
       clearInterval(timer);
-      setExtraction({ phase: 'extracting', progress: 100 });
-      setExtraction({ phase: 'done', text: result.text, truncated: result.truncated });
+      return { ok: true as const, result };
     } catch (error) {
       clearInterval(timer);
-      // Ensure "extracting" is visible for at least ~300ms total so the user
-      // always sees it before the failure state replaces it.
       const elapsed = Date.now() - startTime;
       const remaining = Math.max(0, 300 - elapsed);
       if (remaining > 0) {
         await new Promise((resolve) => setTimeout(resolve, remaining));
       }
-      setExtraction({
-        phase: 'failed',
-        message:
-          error instanceof DocExtractError
-            ? error.message
-            : `"${file.name}" could not be read.`,
-      });
+      const message =
+        error instanceof DocExtractError
+          ? error.message
+          : `"${file.name}" could not be read.`;
+      dispatch({ type: 'fail', id: attachmentId, error: message });
+      return { ok: false as const };
     }
   };
 
-  const handleRemoveFile = () => {
-    setUploadedFileName(null);
-    setTopic('');
-    setExtraction({ phase: 'idle' });
+  const handleRemoveAttachment = (id: string) => {
+    dispatch({ type: 'remove', id });
+    const next = attachments.filter((a) => a.id !== id);
+    if (next.length === 0) {
+      setTopic('');
+    }
+    persistAttachmentNames(next);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
-    // Clear from localStorage
-    localStorage.removeItem(STORAGE_KEY);
   };
 
   const topicFromFileName = (fileName: string): string =>
@@ -256,6 +413,27 @@ export function CreateQuizPage() {
     return diffs;
   };
 
+  // Toggle-all for the section header icons: if every option in the section
+  // is selected, clear them all; otherwise select them all (a partial
+  // selection selects the rest).
+  const areAllQuestionTypesSelected =
+    isSingleActive && isMultipleActive && isIdentificationActive && isEnumerationActive;
+  const toggleAllQuestionTypes = () => {
+    const next = !areAllQuestionTypesSelected;
+    setIsSingleActive(next);
+    setIsMultipleActive(next);
+    setIsIdentificationActive(next);
+    setIsEnumerationActive(next);
+  };
+
+  const areAllDifficultiesSelected = isEasyActive && isMediumActive && isHardActive;
+  const toggleAllDifficulties = () => {
+    const next = !areAllDifficultiesSelected;
+    setIsEasyActive(next);
+    setIsMediumActive(next);
+    setIsHardActive(next);
+  };
+
   const canGenerate = () => {
     return (
       topic.trim().length > 0 &&
@@ -269,7 +447,7 @@ export function CreateQuizPage() {
   const handleResult = async (result: GenerationResult) => {
     if (result.success && result.data && user) {
       try {
-        const quizId = await saveQuiz(result.data, user.uid, isPublic ? 'public' : 'private');
+        const quizId = await saveQuiz(result.data, user.uid);
         // Clear localStorage on successful quiz creation
         localStorage.removeItem(STORAGE_KEY);
         navigate(`/quiz/${quizId}`);
@@ -284,15 +462,18 @@ export function CreateQuizPage() {
     }
   };
 
-  // Document text as generation context: under ~200 chars, failed, or not-yet-
-  // extracted extraction means topic-only generation.
+  // Accepted documents as generation context, joined in attachment order.
+  // A document under ~200 chars, failed, rejected, or still extracting is
+  // skipped; with nothing left, generation falls back to topic-only. (The
+  // combined text can never reach the extractor's 30,000-char cap under the
+  // 10,000-char total limit, so no truncation note is needed here.)
   const buildAdditionalContext = (): string | undefined => {
-    if (extraction.phase !== 'done') return undefined;
-    const { text, truncated } = extraction;
-    if (text.length < MIN_CONTEXT_CHARS) return undefined;
-    return truncated
-      ? `${text}\n\n[Source document truncated to ${MAX_CONTEXT_CHARS.toLocaleString()} characters — base questions on the provided excerpt.]`
-      : text;
+    const done = attachments.filter(
+      (a): a is Attachment & { text: string } =>
+        a.status === 'done' && typeof a.text === 'string' && a.text.length >= MIN_CONTEXT_CHARS
+    );
+    if (done.length === 0) return undefined;
+    return done.map((a) => a.text).join('\n\n');
   };
 
   const handleGenerateQuiz = async () => {
@@ -301,7 +482,6 @@ export function CreateQuizPage() {
       questionTypes: getQuestionTypes(),
       difficulties: getDifficulties(),
       itemCount,
-      isPublic,
       additionalContext: buildAdditionalContext(),
     });
 
@@ -332,7 +512,7 @@ export function CreateQuizPage() {
   };
 
   return (
-    <div className="min-h-screen bg-primary-50/30 dark:bg-gray-900">
+    <div className="flex-1 bg-primary-50/30 dark:bg-gray-900">
       {/* Gradient Header with rounded bottom corners - fixed but constrained to layout width */}
       <header className="inset-x-0 top-0 z-10 max-w-[500px] mx-auto bg-gradient-to-r from-primary-500 to-primary-600 rounded-b-3xl px-4 pb-4">
         {/* Back button */}
@@ -379,6 +559,7 @@ export function CreateQuizPage() {
                 ref={fileInputRef}
                 type="file"
                 accept=".docx,.pdf"
+                multiple
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 onChange={handleFileChange}
                 aria-label="Upload quiz file (DOCX or PDF)"
@@ -394,69 +575,76 @@ export function CreateQuizPage() {
                 </div>
 
                 <p className="text-xs text-gray-400 dark:text-gray-500">
-                  Supports: DOCX, PDF
+                  Supports: DOCX, PDF · select several · 10,000-character combined limit
                 </p>
               </div>
             </div>
           </div>
         </Card>
 
-        {/* File Selected Display */}
-        {uploadedFileName && (
-          <>
-          <div className="mt-3 p-3 bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-800 rounded-xl flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <FileText className="w-5 h-5 text-primary-500" aria-hidden="true" />
-              <span className="text-sm font-medium text-primary-700 dark:text-primary-300 truncate max-w-[250px]">
-                {uploadedFileName}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={handleRemoveFile}
-              className="text-primary-500 hover:text-primary-700 text-sm font-medium"
-            >
-              Remove
-            </button>
-          </div>
-
-          {/* Extraction status line */}
-          {extraction.phase === 'extracting' && (
-            <>
-              <div className="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-1">
-                <div
-                  className="h-full bg-gradient-to-r from-primary-500 to-primary-400 rounded-full progress-shimmer animate-progress"
-                  style={{ width: `${extraction.progress}%` }}
-                  role="progressbar"
-                  aria-valuenow={extraction.progress}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-label="Extracting document text"
-                />
+        {/* Attachment rows: one per uploaded file */}
+        {attachments.map((attachment) => (
+          <div
+            key={attachment.id}
+            className="mt-3 p-3 bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-800 rounded-xl"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 min-w-0">
+                <FileText className="w-5 h-5 text-primary-500 flex-shrink-0" aria-hidden="true" />
+                <span className="text-sm font-medium text-primary-700 dark:text-primary-300 truncate max-w-[250px]">
+                  {attachment.name}
+                </span>
               </div>
-              <p className="mt-1 ml-2 text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />
-                Reading document…
+              <button
+                type="button"
+                onClick={() => handleRemoveAttachment(attachment.id)}
+                className="text-primary-500 hover:text-primary-700 text-sm font-medium flex-shrink-0 ml-2"
+              >
+                Remove
+              </button>
+            </div>
+
+            {attachment.status === 'extracting' && (
+              <>
+                <div className="mt-2 w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-1">
+                  <div
+                    className="h-full bg-gradient-to-r from-primary-500 to-primary-400 rounded-full progress-shimmer animate-progress"
+                    style={{ width: `${attachment.progress}%` }}
+                    role="progressbar"
+                    aria-valuenow={attachment.progress}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label={`Extracting text from ${attachment.name}`}
+                  />
+                </div>
+                <p className="mt-1 ml-2 text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                  <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />
+                  Reading document…
+                </p>
+              </>
+            )}
+            {attachment.status === 'done' && attachment.originalLength !== undefined && (
+              <p className="mt-1 ml-2 text-xs text-gray-500 dark:text-gray-400">
+                Extracted {attachment.originalLength.toLocaleString()} characters.
               </p>
-            </>
-          )}
-          {extraction.phase === 'done' && (
-            <p className="mt-1 ml-2 text-xs text-gray-500 dark:text-gray-400">
-              Extracted {extraction.text.length.toLocaleString()} characters
-              {extraction.truncated ? ` (capped at ${MAX_CONTEXT_CHARS.toLocaleString()})` : ''}.
-            </p>
-          )}
-          {extraction.phase === 'failed' && (
-            <p className="mt-1 ml-2 text-xs text-amber-600 dark:text-amber-400">
-              {extraction.message} Generating from the topic only.
-            </p>
-          )}
-        </>
-        )}
+            )}
+            {(attachment.status === 'failed' || attachment.status === 'rejected') && (
+              <p className="mt-1 ml-2 text-xs text-amber-600 dark:text-amber-400">
+                {attachment.error}
+                {attachment.status === 'failed' && ' Generating from the topic only.'}
+              </p>
+            )}
+          </div>
+        ))}
 
         <Box className='mt-5 border-primary-300'>
-          <BoxTitle className='text-text-primary'>
-              Question Type
+          <BoxTitle className='flex justify-between text-text-primary'>
+              <span>Question Type</span>
+              <SelectAllButton
+                label="Select all question types"
+                isAllSelected={areAllQuestionTypesSelected}
+                onToggle={toggleAllQuestionTypes}
+              />
           </BoxTitle>
           <BoxContent>
             <div className="flex gap-2 flex-wrap">
@@ -489,8 +677,13 @@ export function CreateQuizPage() {
         </Box>
 
         <Box className='border-primary-300 border-t-0'>
-          <BoxTitle className='text-text-primary'>
-              Difficulty
+          <BoxTitle className='flex justify-between text-text-primary'>
+              <span>Difficulty</span>
+              <SelectAllButton
+                label="Select all difficulties"
+                isAllSelected={areAllDifficultiesSelected}
+                onToggle={toggleAllDifficulties}
+              />
           </BoxTitle>
           <BoxContent>
             <div className="flex gap-2 flex-wrap">
@@ -546,49 +739,6 @@ export function CreateQuizPage() {
                   {label}
                 </button>
               ))}
-            </div>
-          </BoxContent>
-        </Box>
-
-        {/* Visibility Toggle */}
-        <Box className='border-primary-300 border-t-0'>
-          <BoxTitle className='text-text-primary'>
-              Visibility
-          </BoxTitle>
-          <BoxContent>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="flex items-center gap-1">
-                  {isPublic ? (
-                    <span className="text-base font-semibold text-primary-600 dark:text-primary-400">
-                      Public
-                    </span>
-                  ) : (
-                    <span className="text-base font-semibold text-gray-900 dark:text-gray-100">
-                      Private
-                    </span>
-                  )}
-                  <span className="text-sm text-gray-500 dark:text-gray-400">
-                    {isPublic ? '(shareable to everyone)' : '(not shareable)'}
-                  </span>
-                </span>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={isPublic}
-                  onChange={(e) => setIsPublic(e.target.checked)}
-                  className="sr-only peer outline-0"
-                />
-                <div className="relative w-12 h-7 rounded-full transition-colors duration-200
-                  peer-focus:outline-none peer-focus:ring-0 peer-focus:ring-offset-0
-                  peer-checked:bg-primary-500
-                  bg-gray-300 dark:bg-gray-600
-                " />
-                <span className="absolute left-1 top-1 w-5 h-5 rounded-full bg-white shadow-md transition-transform duration-200
-                  peer-checked:translate-x-5
-                " />
-              </label>
             </div>
           </BoxContent>
         </Box>

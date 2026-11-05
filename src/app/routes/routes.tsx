@@ -8,7 +8,10 @@ import { NotFoundPage } from '@/features/not-found';
 import { ProtectedRoute } from '@/features/auth/components/ProtectedRoute';
 import { CreateQuizPage } from '@/features/create-quiz';
 import { QuizzesPage } from '@/features/quizzes';
-import { QuizPage, ScorePage, ResultPage } from '@/features/[quiz]';
+import { SearchPage } from '@/features/search';
+import { QuizPage, ScorePage, ResultPage, StatusPage } from '@/features/[quiz]';
+import { ProfilePage } from '@/features/users';
+import { MessagesPage, ConvoPage } from '@/features/messages';
 
 export function AppRoutes() {
   return (
@@ -20,11 +23,17 @@ export function AppRoutes() {
         <Route element={<ProtectedRoute />}>
           <Route path="/" element={<Layout title="Quizza" showFooterNav><HomePage /></Layout>} />
           <Route path="/quizzes" element={<Layout title="My Quizzes" showFooterNav><QuizzesPage /></Layout>} />
+          <Route path="/search" element={<Layout title="Search" showFooterNav><SearchPage /></Layout>} />
           <Route path="/create-quiz" element={<Layout><CreateQuizPage /></Layout>} />
           <Route path="/quiz" element={<Navigate to="/404" replace />} />
           <Route path="/quiz/:quiz" element={<Layout><QuizPage /></Layout>} />
           <Route path="/quiz/:quiz/score" element={<Layout><ScorePage /></Layout>} />
           <Route path="/quiz/:quiz/result" element={<Layout><ResultPage /></Layout>} />
+          <Route path="/status" element={<Layout title="Status" showFooterNav><StatusPage /></Layout>} />
+          <Route path="/messages" element={<Layout title="Messages" showFooterNav><MessagesPage /></Layout>} />
+          <Route path="/messages/:uid" element={<Layout title="Conversation"><ConvoPage /></Layout>} />
+          <Route path="/user" element={<Navigate to="/404" replace />} />
+          <Route path="/user/:uid" element={<Layout title="Profile"><ProfilePage /></Layout>} />
         </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

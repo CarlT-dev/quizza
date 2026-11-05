@@ -1,35 +1,23 @@
-import { useEffect, useState } from 'react';
-
 /**
- * Semi-high fidelity skeleton for HomePage
- * Mirrors the actual layout structure with shimmer animation
+ * Skeleton for HomePage — mirrors the real layout: header, CTA card and
+ * unfinished rows. Mounting is controlled by the parent's isLoading (the old
+ * internal 800ms self-hide could blank the page behind a slower real fetch).
  */
 export function HomePageSkeleton() {
-  const [showSkeleton, setShowSkeleton] = useState(true);
-
-  // Minimum display time to prevent flash (optional)
-  useEffect(() => {
-    const timer = setTimeout(() => setShowSkeleton(false), 800);
-    return () => clearTimeout(timer);
-  }, []);
-
-  if (!showSkeleton) return null;
-
   return (
-    <div className="flex flex-col min-h-screen animate-pulse">
+    <div className="flex flex-col flex-1 animate-pulse">
       {/* Header Skeleton */}
       <header className="flex items-center justify-between px-4 py-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        {/* Left: Avatar + Greeting + Username */}
-        <div className="flex items-center gap-3">
+        {/* Left: Logo */}
+        <div className="flex items-end gap-2">
           <div className="w-10 h-10 rounded-full skeleton" />
-          <div className="space-y-1">
-            <div className="h-3 w-32 skeleton rounded" />
-            <div className="h-4 w-24 skeleton rounded font-medium" />
-          </div>
         </div>
 
-        {/* Right: Notification button */}
-        <div className="w-10 h-10 rounded-full skeleton" />
+        {/* Right: Notification + avatar buttons */}
+        <div className="flex items-center gap-1">
+          <div className="w-8 h-8 rounded-full skeleton" />
+          <div className="w-10 h-10 rounded-full skeleton" />
+        </div>
       </header>
 
       {/* Main Content Skeleton */}
@@ -46,6 +34,24 @@ export function HomePageSkeleton() {
               <div className="h-9 w-full max-w-xs skeleton-rounded" />
             </div>
           </div>
+
+          {/* Unfinished rows skeleton */}
+          <div className="space-y-2" aria-hidden="true">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-3 rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-3"
+              >
+                <SkeletonBase className="w-11 h-11 rounded-xl flex-shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <SkeletonBase className="h-4 w-3/4 rounded" />
+                  <SkeletonBase className="h-2 w-full rounded-full" />
+                  <SkeletonBase className="h-3 w-1/2 rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+
         </div>
       </main>
     </div>

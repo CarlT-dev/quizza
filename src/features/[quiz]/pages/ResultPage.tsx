@@ -250,7 +250,7 @@ export function ResultPage() {
   // Guard: no score in location.state (direct refresh / stale deep link)
   if (!score) {
     return (
-      <div className="min-h-screen bg-primary-50/10 dark:bg-gray-900 flex items-center justify-center px-4">
+      <div className="flex-1 bg-primary-50/10 dark:bg-gray-900 flex items-center justify-center px-4">
         <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl border border-red-200 dark:border-red-800 p-8 text-center">
           <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Results not found</h2>
@@ -268,7 +268,7 @@ export function ResultPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-primary-50/10 dark:bg-gray-900 flex items-center justify-center">
+      <div className="flex-1 bg-primary-50/10 dark:bg-gray-900 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="w-10 h-10 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
           <p className="text-gray-500 dark:text-gray-400">Loading results...</p>
@@ -279,7 +279,7 @@ export function ResultPage() {
 
   if (error || !quizData) {
     return (
-      <div className="min-h-screen bg-primary-50/10 dark:bg-gray-900 flex items-center justify-center px-4">
+      <div className="flex-1 bg-primary-50/10 dark:bg-gray-900 flex items-center justify-center px-4">
         <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl border border-red-200 dark:border-red-800 p-8 text-center">
           <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Unable to Load Results</h2>
@@ -302,7 +302,7 @@ export function ResultPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-primary-50/10 dark:bg-gray-900 flex flex-col">
+    <div className="flex-1 bg-primary-50/10 dark:bg-gray-900 flex flex-col">
       {/* Header with back chevron */}
       <header className="fixed inset-x-0 top-0 z-10 max-w-[500px] mx-auto bg-gradient-to-r from-primary-500 to-primary-600 rounded-b-3xl px-4 pb-4">
         <Button

@@ -52,7 +52,7 @@ export function PullToRefresh({
   return (
     <div
       ref={containerRef}
-      className="relative min-h-screen overflow-auto"
+      className="relative min-h-dvh overflow-auto"
       style={{
         touchAction: 'pan-y',
       }}
@@ -120,7 +120,7 @@ export function PullToRefresh({
       </div>
 
       {/* Content */}
-      <div className="relative pb-20">{children}</div>
+      <div className="relative">{children}</div>
 
       {/* Toast Notification */}
       {toast && (
