@@ -1,17 +1,98 @@
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, AlertTriangle, UserX } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, UserX, Loader2 } from 'lucide-react';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { StatTile, Button } from '@/shared/components/ui';
+import { useAuth } from '@/features/auth';
+import {
+  acceptFriendRequest,
+  cancelFriendRequest,
+  declineFriendRequest,
+  getOtherParticipantUid,
+  removeFriend,
+  sendFriendRequest,
+  useFriendships,
+  type FriendshipsData,
+  type FriendshipDocument,
+} from '@/features/friends';
 
 /** Module-scope helper: keeps `new Date` out of the component render (oxlint purity). */
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
+type ProfileRelation = 'friends' | 'requested' | 'incoming' | 'none';
+
+/** Relationship to the profile's user, from the current friendship buckets —
+ * derived from live data on every render, never from cached action results,
+ * so the button always reflects what is actually true in Firestore. */
+function relationTo(
+  friendships: FriendshipsData | null,
+  myUid: string,
+  otherUid: string
+): ProfileRelation {
+  if (!friendships) return 'none';
+  const isOther = (f: FriendshipDocument) => getOtherParticipantUid(f, myUid) === otherUid;
+  if (friendships.friends.some(isOther)) return 'friends';
+  if (friendships.outgoing.some(isOther)) return 'requested';
+  if (friendships.incoming.some(isOther)) return 'incoming';
+  return 'none';
+}
+
 export function ProfilePage() {
   const navigate = useNavigate();
   const { uid } = useParams<{ uid: string }>();
+  const { user } = useAuth();
   const { profile, isLoading, error, refetch } = useUserProfile(uid);
+  const { friendships, refetch: refetchFriendships } = useFriendships();
+
+  // Relationship UI state derives from the CURRENT friendship buckets, never
+  // from cached action results — a request accepted elsewhere disappears from
+  // this page on the next load.
+  const isSelf = !!user && user.uid === uid;
+  const relation = relationTo(friendships, user?.uid ?? '', uid ?? '');
+  const [isBusy, setIsBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  /** Accept / decline / cancel / remove — boolean APIs, one shape. */
+  const runFriendAction = async (action: () => Promise<boolean>) => {
+    if (isBusy) return;
+    setIsBusy(true);
+    setFailed(false);
+    let ok = false;
+    try {
+      ok = await action();
+    } finally {
+      setIsBusy(false);
+    }
+    // Refetch either way: a settled-but-false result (the request changed
+    // elsewhere) still needs current data; only a genuine failure keeps the
+    // inline note.
+    refetchFriendships();
+    if (!ok) setFailed(true);
+  };
+
+  const handleAddFriend = async () => {
+    if (!profile || isBusy) return;
+    setIsBusy(true);
+    setFailed(false);
+    try {
+      const result = await sendFriendRequest(profile.username);
+      // Already-friends / pending-either-way are settled states the refetch
+      // below renders correctly; only real failures show the note.
+      if (
+        !result.success &&
+        result.errorCode !== 'already-friends' &&
+        result.errorCode !== 'request-already-pending' &&
+        result.errorCode !== 'request-already-incoming'
+      ) {
+        setFailed(true);
+      }
+    } finally {
+      setIsBusy(false);
+      refetchFriendships();
+    }
+  };
 
   return (
     <div className="flex-1 bg-primary-50/30 dark:bg-gray-900">
@@ -78,6 +159,55 @@ export function ProfilePage() {
                 <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
                   Member since {formatDate(profile.createdAt)}
                 </p>
+              )}
+
+              {/* Relationship action — hidden on the user's own profile and
+                  while the friendship data is unavailable */}
+              {!isSelf && uid && friendships && (
+                <div className="mt-4 flex flex-col items-center">
+                  {isBusy ? (
+                    <Loader2 className="w-5 h-5 text-gray-400 animate-spin" aria-hidden="true" />
+                  ) : relation === 'incoming' ? (
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" onClick={() => runFriendAction(() => acceptFriendRequest(uid))}>
+                        Accept
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => runFriendAction(() => declineFriendRequest(uid))}
+                      >
+                        Decline
+                      </Button>
+                    </div>
+                  ) : relation === 'friends' ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-red-600 dark:text-red-400"
+                      onClick={() => runFriendAction(() => removeFriend(uid))}
+                    >
+                      Remove Friend
+                    </Button>
+                  ) : relation === 'requested' ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => runFriendAction(() => cancelFriendRequest(uid))}
+                    >
+                      Cancel request
+                    </Button>
+                  ) : (
+                    <Button size="sm" onClick={handleAddFriend}>
+                      Add Friend
+                    </Button>
+                  )}
+                  {failed && (
+                    <p className="mt-2 text-xs text-red-600 dark:text-red-400" role="alert">
+                      Something went wrong — try again.
+                    </p>
+                  )}
+                </div>
               )}
             </div>
 

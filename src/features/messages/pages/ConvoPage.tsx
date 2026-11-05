@@ -1,27 +1,42 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, AlertTriangle, MessageCircle } from 'lucide-react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, AlertTriangle, MessageCircle, Share2, Check, Loader2 } from 'lucide-react';
 import { useAuth } from '@/features/auth';
 import { useUserProfile } from '@/features/users';
+import { getCardColor, getQuizzesColorPreferences, getUserQuizzes, type CardColorId, type QuizDocument } from '@/features/quiz/api/quiz';
 import { formatRelativeTime } from '@/shared/utils';
-import { Button } from '@/shared/components/ui';
-import { buildConvoId, getConvoShares, type ShareDocument } from '../api/messages';
+import { BottomSheet, Button } from '@/shared/components/ui';
+import { buildConvoId, getConvoShares, shareQuizToUser, type ShareDocument } from '../api/messages';
 
 export function ConvoPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { uid: otherUid } = useParams<{ uid: string }>();
   const { user, loading: authLoading } = useAuth();
-  const { profile } = useUserProfile(otherUid);
+  const { profile, isLoading: profileLoading } = useUserProfile(otherUid);
 
   const [shares, setShares] = useState<ShareDocument[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
 
+  // Share sheet: my quizzes + their user-set card colors, multi-select.
+  const [isShareOpen, setIsShareOpen] = useState(false);
+  const [myQuizzes, setMyQuizzes] = useState<QuizDocument[]>([]);
+  const [quizColors, setQuizColors] = useState<Map<string, CardColorId>>(new Map());
+  const [shareSheetLoading, setShareSheetLoading] = useState(false);
+  const [shareSheetError, setShareSheetError] = useState<string | null>(null);
+  const [selectedQuizIds, setSelectedQuizIds] = useState<Set<string>>(new Set());
+  const [isSharing, setIsSharing] = useState(false);
+  const [shareSheetToken, setShareSheetToken] = useState(0);
+
   const isSelf = Boolean(user && otherUid === user.uid);
-  // Resolves once the profile loads; until then (or if the account is gone)
-  // the uid slice stands in.
-  const displayName = profile?.username ?? (otherUid ? otherUid.slice(0, 8) : '?');
+  // Freshest first: the loaded profile (also corrects renames), then the
+  // username the previous screen handed over in navigation state (renders
+  // on the first frame, no fetch), then a uid slice for direct URL entry.
+  const stateUsername = (location.state as { username?: string } | null)?.username;
+  const displayName =
+    profile?.username ?? stateUsername ?? (otherUid ? otherUid.slice(0, 8) : '?');
 
   useEffect(() => {
     if (authLoading) return;
@@ -66,8 +81,83 @@ export function ConvoPage() {
 
   const handleRetry = () => setReloadToken(token => token + 1);
 
+  // Load my quizzes + their color preferences while the share sheet is open
+  // (fresh per open, so a just-created quiz shows up).
+  useEffect(() => {
+    if (!isShareOpen || !user) return;
+    let cancelled = false;
+
+    void Promise.resolve().then(async () => {
+      setShareSheetLoading(true);
+      setShareSheetError(null);
+      try {
+        const quizzes = await getUserQuizzes(user.uid, 20);
+        if (cancelled) return;
+        setMyQuizzes(quizzes);
+        const colors = await getQuizzesColorPreferences(
+          quizzes.map(q => q.id).filter((id): id is string => Boolean(id)),
+          user.uid
+        );
+        if (!cancelled) setQuizColors(colors);
+      } catch (err) {
+        console.error('Failed to load your quizzes:', err);
+        if (!cancelled) setShareSheetError('Failed to load your quizzes. Please try again.');
+      } finally {
+        if (!cancelled) setShareSheetLoading(false);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isShareOpen, user, shareSheetToken]);
+
+  const toggleQuizSelection = (quizId: string) => {
+    setSelectedQuizIds(prev => {
+      const next = new Set(prev);
+      if (next.has(quizId)) {
+        next.delete(quizId);
+      } else {
+        next.add(quizId);
+      }
+      return next;
+    });
+  };
+
+  // Sequential, not Promise.all: shareQuizToUser creates the convo doc when
+  // it doesn't exist yet — parallel calls would race that creation and
+  // clobber the convo's shareCount.
+  const handleShareSelected = async () => {
+    if (!user || !otherUid || selectedQuizIds.size === 0 || isSharing) return;
+    setIsSharing(true);
+    try {
+      for (const quiz of myQuizzes) {
+        const quizId = quiz.id;
+        if (!quizId || !selectedQuizIds.has(quizId)) continue;
+        await shareQuizToUser(quiz, user.uid, otherUid);
+        // Drop each quiz from the selection as it lands, so a retry after a
+        // mid-loop failure only shares the ones that didn't make it.
+        setSelectedQuizIds(prev => {
+          const next = new Set(prev);
+          next.delete(quizId);
+          return next;
+        });
+      }
+      setIsShareOpen(false);
+      setSelectedQuizIds(new Set());
+      setReloadToken(token => token + 1);
+    } catch (err) {
+      console.error('Failed to share quiz:', err);
+      setShareSheetError('Failed to share. Please try again.');
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
+  const handleShareSheetRetry = () => setShareSheetToken(token => token + 1);
+
   const renderContent = () => {
-    if (isLoading) {
+    if (isLoading || profileLoading) {
       return (
         <div className="max-w-[500px] mx-auto px-4 py-4 w-full flex flex-col gap-2" aria-hidden="true">
           <div className="w-2/3 h-20 rounded-2xl skeleton skeleton-rounded self-start" />
@@ -150,6 +240,100 @@ export function ConvoPage() {
     );
   };
 
+  const renderShareSheetContent = () => {
+    if (shareSheetLoading) {
+      return (
+        <div className="flex gap-2 overflow-x-auto px-4 py-3" aria-hidden="true">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="w-20 h-24 rounded-xl skeleton skeleton-rounded shrink-0" />
+          ))}
+        </div>
+      );
+    }
+
+    if (shareSheetError) {
+      return (
+        <div className="px-4 py-6 text-center">
+          <AlertTriangle className="w-8 h-8 text-red-500 mx-auto mb-2" />
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">{shareSheetError}</p>
+          <Button size="sm" onClick={handleShareSheetRetry}>
+            Try Again
+          </Button>
+        </div>
+      );
+    }
+
+    if (myQuizzes.length === 0) {
+      return (
+        <div className="px-4 py-8 text-center">
+          <MessageCircle className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            You haven't created any quizzes yet.
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <>
+        {/* Tiny colored tiles, horizontal scroll — tap to select, multi-select */}
+        <div className='px-4 pb-3'>
+          <div className="flex gap-2 overflow-x-auto px-4 py-3 snap-x">
+            {myQuizzes.map(quiz => {
+              const quizId = quiz.id;
+              if (!quizId) return null;
+              const isSelected = selectedQuizIds.has(quizId);
+              const color = getCardColor(quizColors.get(quizId) ?? 'default');
+              const isDefaultColor = color.id === 'default';
+              return (
+                <button
+                  key={quizId}
+                  type="button"
+                  onClick={() => toggleQuizSelection(quizId)}
+                  aria-pressed={isSelected}
+                  className={`w-20 h-24 shrink-0 snap-start rounded-xl p-2 text-left flex flex-col justify-between transition-transform active:scale-95 ${
+                    isDefaultColor
+                      ? 'bg-gray-100 dark:bg-gray-700'
+                      : `bg-gradient-to-br ${color.gradient}`
+                  } ${isSelected ? 'ring-2 ring-offset-2 ring-primary-500 ring-offset-white dark:ring-offset-gray-800' : ''}`}
+                >
+                  <span
+                    className={`text-[11px] font-bold leading-tight line-clamp-3 ${
+                      isDefaultColor ? 'text-gray-900 dark:text-gray-100' : 'text-white'
+                    }`}
+                  >
+                    {quiz.title}
+                  </span>
+                  {isSelected && (
+                    <span className="w-4 h-4 rounded-full bg-white flex items-center justify-center self-end">
+                      <Check className="w-3 h-3 text-primary-600" aria-hidden="true" />
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="px-4 pb-4">
+          <Button
+            onClick={handleShareSelected}
+            disabled={selectedQuizIds.size === 0 || isSharing}
+            className="w-full"
+          >
+            {isSharing ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                Sharing…
+              </>
+            ) : (
+              `Share${selectedQuizIds.size > 0 ? ` (${selectedQuizIds.size})` : ''}`
+            )}
+          </Button>
+        </div>
+      </>
+    );
+  };
+
   return (
     <div className="flex-1 bg-primary-50/30 dark:bg-gray-900">
       {/* Header with back button — no footer nav on conversation pages */}
@@ -173,6 +357,26 @@ export function ConvoPage() {
       <main className="pb-8">
         {renderContent()}
       </main>
+
+      {/* Floating share button — opens the bottom sheet */}
+      {!isSelf && !error && (
+        <button
+          type="button"
+          onClick={() => setIsShareOpen(true)}
+          aria-label="Share a quiz"
+          className="fixed bottom-6 right-4 z-30 w-14 h-14 rounded-full bg-primary-500 hover:bg-primary-600 text-white shadow-lg flex items-center justify-center transition-transform active:scale-95"
+        >
+          <Share2 className="w-6 h-6" aria-hidden="true" />
+        </button>
+      )}
+
+      <BottomSheet
+        isOpen={isShareOpen}
+        onClose={() => setIsShareOpen(false)}
+        title={`Share with @${displayName}`}
+      >
+        {renderShareSheetContent()}
+      </BottomSheet>
     </div>
   );
 }

@@ -140,5 +140,15 @@ export async function shareQuizToUser(
     });
   }
   batch.update(doc(db, 'quizzes', quiz.id), { sharedWith: arrayUnion(toUid) });
+  // The recipient's quiz-share notification rides in the same atomic batch:
+  // the row can never announce a share that didn't land (or vice versa).
+  batch.set(doc(collection(db, 'notifications')), {
+    userId: toUid,
+    fromUid,
+    type: 'quiz-share',
+    quizId: quiz.id,
+    quizTitle: quiz.title,
+    createdAt: serverTimestamp(),
+  });
   await batch.commit();
 }

@@ -14,6 +14,11 @@ import { HomePageSkeleton } from '../components/HomePageSkeleton';
 import { SlidePanel } from '@/shared/components/ui/SlidePanel';
 import { NotificationContent } from '../components/NotificationContent';
 import { UserMenuContent } from '../components/UserMenuContent';
+import {
+  getLastSeenNotificationsAt,
+  markNotificationsSeen,
+  useNotifications,
+} from '@/features/notifications';
 
 const MAX_UNFINISHED = 3;
 
@@ -23,6 +28,13 @@ export function HomePage() {
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Notification feed for the bell's red dot; the panel's own copy lives in
+  // NotificationContent (fresh per open).
+  const { notifications, refetch: refetchNotifications } = useNotifications();
+  // Per-device "seen" marker — localStorage on purpose: opening the panel in
+  // THIS browser clears the dot here only.
+  const [lastSeenMs, setLastSeenMs] = useState(() => getLastSeenNotificationsAt());
 
   // Unfinished attempts ("continue where you left off")
   const [unfinished, setUnfinished] = useState<Array<{ quiz: QuizDocument; progress: QuizProgress }>>([]);
@@ -79,12 +91,35 @@ export function HomePage() {
     navigate(`/quiz/${quizId}`);
   }, [navigate]);
 
+  // Opening the panel marks everything seen on this device: the dot clears
+  // immediately and stays clear until something newer arrives.
+  useEffect(() => {
+    if (!notificationOpen) return;
+    // Deferred so setLastSeenMs isn't a synchronous effect setState
+    // (react(set-state-in-effect)) — same pattern as the quiz data hooks.
+    void Promise.resolve().then(() => {
+      const now = Date.now();
+      markNotificationsSeen(now);
+      setLastSeenMs(now);
+    });
+  }, [notificationOpen]);
+
   const handleCreateQuiz = useCallback(() => {
     navigate('/create-quiz');
   }, [navigate]);
 
   const username = user?.displayName || user?.email?.split('@')[0] || 'User';
   const userInitial = username.charAt(0).toUpperCase();
+
+  // Red dot: a live friend request (its notification row exists exactly while
+  // the request is pending) or any other notification newer than the last
+  // time this device opened the panel.
+  const hasUnseen =
+    !!notifications &&
+    (notifications.some(n => n.type === 'friend-request') ||
+      notifications.some(
+        n => n.type !== 'friend-request' && (n.createdAt?.toMillis?.() ?? 0) > lastSeenMs
+      ));
 
   return (
     <div className="flex flex-col flex-1">
@@ -109,12 +144,18 @@ export function HomePage() {
               <Button
                 variant="ghost"
                 padding='none'
-                className="p-1"
+                className="p-1 relative"
                 onClick={() => setNotificationOpen(true)}
-                aria-label="Notifications"
+                aria-label={hasUnseen ? 'Notifications, new activity' : 'Notifications'}
                 aria-expanded={notificationOpen}
               >
                 <Bell className="w-6 h-6 text-gray-700 dark:text-gray-300" />
+                {hasUnseen && (
+                  <span
+                    className="absolute top-0.5 right-0.5 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900"
+                    aria-hidden="true"
+                  />
+                )}
               </Button>
 
               {/* User Avatar Button */}
@@ -180,7 +221,12 @@ export function HomePage() {
           {/* Notification Slide Panel */}
           <SlidePanel
             isOpen={notificationOpen}
-            onClose={() => setNotificationOpen(false)}
+            onClose={() => {
+              setNotificationOpen(false);
+              // Refresh the feed so the dot reflects anything acted on inside
+              // the panel (an accepted request's row is gone server-side).
+              refetchNotifications();
+            }}
             title="Notifications"
             width="w-full sm:w-[400px] lg:w-[480px]"
           >

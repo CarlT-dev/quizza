@@ -17,8 +17,13 @@ service cloud.firestore {
     // 3. quizzes collection - owner access, plus recipients of a personal share
     match /quizzes/{quizId} {
       allow create: if request.auth != null;
+      // resource == null: getQuizById and getQuizzesByIds read quizzes that
+      // may be deleted while a share/attempts row still points at them — a
+      // read of a non-existent doc evaluates with a null resource (same
+      // pattern as the convos/friendships read rules)
       allow read: if request.auth != null &&
-        (resource.data.createdBy == request.auth.uid ||
+        (resource == null ||
+         resource.data.createdBy == request.auth.uid ||
          request.auth.uid in resource.data.get('sharedWith', []));
       allow update, delete: if request.auth != null &&
         resource.data.createdBy == request.auth.uid;
@@ -89,8 +94,13 @@ service cloud.firestore {
 
     // 7. convos - quiz shares between exactly two users
     match /convos/{convoId} {
+      // resource == null: shareQuizToUser get()s the pair convo to check for an
+      // existing one before creating it — a first-time pair has no doc yet, and
+      // reads of non-existent docs evaluate with a null resource (same pattern
+      // as the friendships read rule)
       allow read: if request.auth != null &&
-        request.auth.uid in resource.data.participants;
+        (resource == null ||
+         request.auth.uid in resource.data.participants);
 
       allow create: if request.auth != null &&
         request.resource.data.participants.size() == 2 &&
@@ -105,9 +115,14 @@ service cloud.firestore {
         request.resource.data.participants == resource.data.participants;
 
       match /shares/{shareId} {
+        // !exists(): ConvoPage lists a pair's shares before the first share
+        // has created the parent convo. A non-existent parent's subcollection
+        // is provably empty — creates below require the parent, and convos
+        // have no delete — so allowing this read leaks nothing.
         allow read: if request.auth != null &&
-          request.auth.uid in
-          get(/databases/$(database)/documents/convos/$(convoId)).data.participants;
+          (!exists(/databases/$(database)/documents/convos/$(convoId)) ||
+           request.auth.uid in
+           get(/databases/$(database)/documents/convos/$(convoId)).data.participants);
 
         // sharedBy is forged-proof: a participant can only send as themselves
         allow create: if request.auth != null &&
@@ -115,6 +130,84 @@ service cloud.firestore {
           request.auth.uid in
           get(/databases/$(database)/documents/convos/$(convoId)).data.participants;
       }
+    }
+
+    // 8. friendships - one doc per pair; the doc id IS the sorted uids joined
+    // by _ (same convention as convos), so a request from A to B and from B
+    // to A can only ever land on one document.
+    match /friendships/{friendshipId} {
+      // resource == null: sendFriendRequest's transaction starts by reading
+      // the pair doc to check for an existing request, and a fresh pair has
+      // no doc yet — reads of non-existent docs evaluate with a null
+      // resource (same pattern as the quizAttempts read rule)
+      allow read: if request.auth != null &&
+        (resource == null ||
+         request.auth.uid in resource.data.participants);
+
+      allow create: if request.auth != null &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.requestedBy == request.auth.uid &&
+        request.resource.data.participants.size() == 2 &&
+        request.resource.data.participants[0] != request.resource.data.participants[1] &&
+        request.auth.uid in request.resource.data.participants &&
+        // Canonical id only: participants must be sorted and must equal the
+        // doc id, so no client can shadow the pair with a second document
+        request.resource.data.participants[0] < request.resource.data.participants[1] &&
+        friendshipId == request.resource.data.participants[0] + '_' + request.resource.data.participants[1] &&
+        // Both sides must be real accounts (register always writes users/{uid})
+        exists(/databases/$(database)/documents/users/$(request.resource.data.participants[0])) &&
+        exists(/databases/$(database)/documents/users/$(request.resource.data.participants[1])) &&
+        // createdAt must be server-generated, not a client-forged timestamp
+        request.resource.data.createdAt == request.time;
+
+      // Status changes are one-way and requester-proof: only the participant
+      // who did NOT send the request may flip pending -> accepted, and
+      // participants/requestedBy/createdAt are immutable (mirrors the convos
+      // participants-immutability rule)
+      allow update: if request.auth != null &&
+        request.auth.uid in resource.data.participants &&
+        request.auth.uid != resource.data.requestedBy &&
+        resource.data.status == 'pending' &&
+        request.resource.data.participants == resource.data.participants &&
+        request.resource.data.requestedBy == resource.data.requestedBy &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.status == 'accepted' &&
+        request.resource.data.respondedAt == request.time;
+
+      // Decline, cancel and unfriend are all deletes: either participant may
+      // remove the doc, which frees the pair id for a future re-request
+      allow delete: if request.auth != null &&
+        request.auth.uid in resource.data.participants;
+    }
+
+    // 9. notifications - one doc per event, written by the ACTOR (fromUid ==
+    // auth.uid) into the RECIPIENT's feed (userId != auth.uid), so a client
+    // can only ever plant notifications that point back at itself. Recipients
+    // read and delete their own rows; the actor may also delete a row it
+    // created (used to retract the friend-request notification when its
+    // request is cancelled). No update rule: rows are never edited, only
+    // created and removed.
+    match /notifications/{notificationId} {
+      // resource == null: settling a request batch-deletes the pair's
+      // notification row even when it is already gone — a no-op delete of a
+      // non-existent doc is still rule-evaluated
+      allow read, delete: if request.auth != null &&
+        (resource == null ||
+         resource.data.userId == request.auth.uid ||
+         resource.data.fromUid == request.auth.uid);
+
+      allow create: if request.auth != null &&
+        request.resource.data.fromUid == request.auth.uid &&
+        request.resource.data.userId != request.auth.uid &&
+        request.resource.data.type in ['friend-request', 'friend-request-accepted', 'quiz-share'] &&
+        // Only quiz-share rows may carry quiz fields, and both must be real.
+        // Parenthesized: CEL's && binds tighter than ||, and the quiz-field
+        // alternative must stay INSIDE the auth/fromUid/type checks.
+        ((request.resource.data.type != 'quiz-share') ||
+         (request.resource.data.quizId is string &&
+          request.resource.data.quizTitle is string)) &&
+        // createdAt must be server-generated, not a client-forged timestamp
+        request.resource.data.createdAt == request.time;
     }
   }
 }
