@@ -1,6 +1,5 @@
 import { collection, documentId, getDocs, limit, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { getPublicQuizzes, type QuizDocument } from '@/features/quiz';
 
 export interface UsernameSearchResult {
   username: string;
@@ -27,18 +26,4 @@ export async function searchUsernames(prefix: string, maxCount = 10): Promise<Us
   return snap.docs
     .map(d => ({ username: d.id, uid: (d.data().uid as string | undefined) ?? '' }))
     .filter(r => Boolean(r.uid));
-}
-
-/**
- * Per-session cache of the public quiz feed: Search filters it client-side on
- * every keystroke, so the (up to 50) newest public quizzes are fetched once
- * and reused. A failed fetch leaves the cache empty and retries next call.
- */
-let publicQuizzesCache: QuizDocument[] | null = null;
-
-export async function getCachedPublicQuizzes(): Promise<QuizDocument[]> {
-  if (!publicQuizzesCache) {
-    publicQuizzesCache = await getPublicQuizzes(50);
-  }
-  return publicQuizzesCache;
 }

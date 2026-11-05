@@ -4,13 +4,9 @@ import { useAuth } from '@/features/auth/context/AuthContext';
 import {
   getUserAttempts,
   getQuizzesByIds,
-  getPublicQuizzes,
   type QuizDocument,
   type QuizProgress,
 } from '@/features/quiz';
-import { useSavedQuizzes } from '@/features/quiz/hooks/useSavedQuizzes';
-import { useUsernames } from '@/features/users';
-import { PublicQuizCard } from '@/features/quizzes/components/PublicQuizCard';
 import { UnfinishedQuizCard } from '@/features/quizzes/components/UnfinishedQuizCard';
 import { Button } from '@/shared/components/ui';
 import { Bell } from 'lucide-react';
@@ -18,9 +14,13 @@ import { HomePageSkeleton } from '../components/HomePageSkeleton';
 import { SlidePanel } from '@/shared/components/ui/SlidePanel';
 import { NotificationContent } from '../components/NotificationContent';
 import { UserMenuContent } from '../components/UserMenuContent';
+import {
+  getLastSeenNotificationsAt,
+  markNotificationsSeen,
+  useNotifications,
+} from '@/features/notifications';
 
 const MAX_UNFINISHED = 3;
-const FEED_SIZE = 20;
 
 export function HomePage() {
   const navigate = useNavigate();
@@ -29,16 +29,15 @@ export function HomePage() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Unfinished attempts ("continue where you left off") + public feed
+  // Notification feed for the bell's red dot; the panel's own copy lives in
+  // NotificationContent (fresh per open).
+  const { notifications, refetch: refetchNotifications } = useNotifications();
+  // Per-device "seen" marker — localStorage on purpose: opening the panel in
+  // THIS browser clears the dot here only.
+  const [lastSeenMs, setLastSeenMs] = useState(() => getLastSeenNotificationsAt());
+
+  // Unfinished attempts ("continue where you left off")
   const [unfinished, setUnfinished] = useState<Array<{ quiz: QuizDocument; progress: QuizProgress }>>([]);
-  const [feedQuizzes, setFeedQuizzes] = useState<QuizDocument[]>([]);
-
-  // Save bookmarks for the For You feed
-  const { savedIds, toggleSave } = useSavedQuizzes(user?.uid);
-
-  // Resolved creator names for feed cards
-  const ownerUids = [...new Set(feedQuizzes.map(q => q.createdBy))];
-  const ownerNames = useUsernames(ownerUids);
 
   // Real initial load (replaces the old fake 600ms timer)
   useEffect(() => {
@@ -53,13 +52,7 @@ export function HomePage() {
       }
 
       try {
-        const [attempts, publicQuizzes] = await Promise.all([
-          getUserAttempts(user.uid),
-          getPublicQuizzes(FEED_SIZE).catch(err => {
-            console.error('Failed to fetch public quizzes:', err);
-            return [] as QuizDocument[];
-          }),
-        ]);
+        const attempts = await getUserAttempts(user.uid);
         if (cancelled) return;
 
         // In-progress attempts: started but not completed, newest first
@@ -79,8 +72,6 @@ export function HomePage() {
             .filter(a => quizzesById.has(a.quizId))
             .map(a => ({ quiz: quizzesById.get(a.quizId)!, progress: a }))
         );
-        // Own quizzes are already reachable from the Quizzes page
-        setFeedQuizzes(publicQuizzes.filter(q => q.createdBy !== user.uid));
       } catch (err) {
         console.error('Failed to load home data:', err);
         // Sections stay empty; the page still renders
@@ -100,12 +91,35 @@ export function HomePage() {
     navigate(`/quiz/${quizId}`);
   }, [navigate]);
 
+  // Opening the panel marks everything seen on this device: the dot clears
+  // immediately and stays clear until something newer arrives.
+  useEffect(() => {
+    if (!notificationOpen) return;
+    // Deferred so setLastSeenMs isn't a synchronous effect setState
+    // (react(set-state-in-effect)) — same pattern as the quiz data hooks.
+    void Promise.resolve().then(() => {
+      const now = Date.now();
+      markNotificationsSeen(now);
+      setLastSeenMs(now);
+    });
+  }, [notificationOpen]);
+
   const handleCreateQuiz = useCallback(() => {
     navigate('/create-quiz');
   }, [navigate]);
 
   const username = user?.displayName || user?.email?.split('@')[0] || 'User';
   const userInitial = username.charAt(0).toUpperCase();
+
+  // Red dot: a live friend request (its notification row exists exactly while
+  // the request is pending) or any other notification newer than the last
+  // time this device opened the panel.
+  const hasUnseen =
+    !!notifications &&
+    (notifications.some(n => n.type === 'friend-request') ||
+      notifications.some(
+        n => n.type !== 'friend-request' && (n.createdAt?.toMillis?.() ?? 0) > lastSeenMs
+      ));
 
   return (
     <div className="flex flex-col flex-1">
@@ -130,12 +144,18 @@ export function HomePage() {
               <Button
                 variant="ghost"
                 padding='none'
-                className="p-1"
+                className="p-1 relative"
                 onClick={() => setNotificationOpen(true)}
-                aria-label="Notifications"
+                aria-label={hasUnseen ? 'Notifications, new activity' : 'Notifications'}
                 aria-expanded={notificationOpen}
               >
                 <Bell className="w-6 h-6 text-gray-700 dark:text-gray-300" />
+                {hasUnseen && (
+                  <span
+                    className="absolute top-0.5 right-0.5 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900"
+                    aria-hidden="true"
+                  />
+                )}
               </Button>
 
               {/* User Avatar Button */}
@@ -195,34 +215,18 @@ export function HomePage() {
                 </section>
               )}
 
-              {/* For You — newest public quizzes by others */}
-              {feedQuizzes.length > 0 && (
-                <section aria-label="For You">
-                  <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
-                    For You
-                  </h2>
-                  <div className="space-y-3">
-                    {feedQuizzes.map((quiz) => (
-                      <PublicQuizCard
-                        key={quiz.id}
-                        quiz={quiz}
-                        ownerName={ownerNames.get(quiz.createdBy)}
-                        isSaved={savedIds.has(quiz.id ?? '')}
-                        showSave
-                        onToggleSave={toggleSave}
-                        onClick={handleOpenQuiz}
-                      />
-                    ))}
-                  </div>
-                </section>
-              )}
             </div>
           </main>
 
           {/* Notification Slide Panel */}
           <SlidePanel
             isOpen={notificationOpen}
-            onClose={() => setNotificationOpen(false)}
+            onClose={() => {
+              setNotificationOpen(false);
+              // Refresh the feed so the dot reflects anything acted on inside
+              // the panel (an accepted request's row is gone server-side).
+              refetchNotifications();
+            }}
             title="Notifications"
             width="w-full sm:w-[400px] lg:w-[480px]"
           >

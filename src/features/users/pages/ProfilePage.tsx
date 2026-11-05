@@ -1,16 +1,42 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, AlertTriangle, UserX } from 'lucide-react';
-import { useAuth } from '@/features/auth';
+import { ArrowLeft, AlertTriangle, UserX, Loader2 } from 'lucide-react';
 import { useUserProfile } from '../hooks/useUserProfile';
-import { useSavedQuizzes } from '@/features/quiz/hooks/useSavedQuizzes';
-import { getPublicQuizzesByUser, type QuizDocument } from '@/features/quiz';
-import { PublicQuizCard } from '@/features/quizzes/components/PublicQuizCard';
 import { StatTile, Button } from '@/shared/components/ui';
+import { useAuth } from '@/features/auth';
+import {
+  acceptFriendRequest,
+  cancelFriendRequest,
+  declineFriendRequest,
+  getOtherParticipantUid,
+  removeFriend,
+  sendFriendRequest,
+  useFriendships,
+  type FriendshipsData,
+  type FriendshipDocument,
+} from '@/features/friends';
 
 /** Module-scope helper: keeps `new Date` out of the component render (oxlint purity). */
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+type ProfileRelation = 'friends' | 'requested' | 'incoming' | 'none';
+
+/** Relationship to the profile's user, from the current friendship buckets —
+ * derived from live data on every render, never from cached action results,
+ * so the button always reflects what is actually true in Firestore. */
+function relationTo(
+  friendships: FriendshipsData | null,
+  myUid: string,
+  otherUid: string
+): ProfileRelation {
+  if (!friendships) return 'none';
+  const isOther = (f: FriendshipDocument) => getOtherParticipantUid(f, myUid) === otherUid;
+  if (friendships.friends.some(isOther)) return 'friends';
+  if (friendships.outgoing.some(isOther)) return 'requested';
+  if (friendships.incoming.some(isOther)) return 'incoming';
+  return 'none';
 }
 
 export function ProfilePage() {
@@ -18,44 +44,55 @@ export function ProfilePage() {
   const { uid } = useParams<{ uid: string }>();
   const { user } = useAuth();
   const { profile, isLoading, error, refetch } = useUserProfile(uid);
+  const { friendships, refetch: refetchFriendships } = useFriendships();
 
-  // The profile owner's public quizzes (client-side newest-first sort)
-  const [quizzes, setQuizzes] = useState<QuizDocument[]>([]);
-  const [quizzesLoading, setQuizzesLoading] = useState(true);
+  // Relationship UI state derives from the CURRENT friendship buckets, never
+  // from cached action results — a request accepted elsewhere disappears from
+  // this page on the next load.
+  const isSelf = !!user && user.uid === uid;
+  const relation = relationTo(friendships, user?.uid ?? '', uid ?? '');
+  const [isBusy, setIsBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
 
-  // Save bookmarks (hidden on the viewer's own profile)
-  const { savedIds, toggleSave } = useSavedQuizzes(user?.uid);
-  const isOwnProfile = !!user && user.uid === uid;
+  /** Accept / decline / cancel / remove — boolean APIs, one shape. */
+  const runFriendAction = async (action: () => Promise<boolean>) => {
+    if (isBusy) return;
+    setIsBusy(true);
+    setFailed(false);
+    let ok = false;
+    try {
+      ok = await action();
+    } finally {
+      setIsBusy(false);
+    }
+    // Refetch either way: a settled-but-false result (the request changed
+    // elsewhere) still needs current data; only a genuine failure keeps the
+    // inline note.
+    refetchFriendships();
+    if (!ok) setFailed(true);
+  };
 
-  useEffect(() => {
-    let cancelled = false;
-    void Promise.resolve().then(async () => {
-      if (!uid) {
-        setQuizzes([]);
-        setQuizzesLoading(false);
-        return;
+  const handleAddFriend = async () => {
+    if (!profile || isBusy) return;
+    setIsBusy(true);
+    setFailed(false);
+    try {
+      const result = await sendFriendRequest(profile.username);
+      // Already-friends / pending-either-way are settled states the refetch
+      // below renders correctly; only real failures show the note.
+      if (
+        !result.success &&
+        result.errorCode !== 'already-friends' &&
+        result.errorCode !== 'request-already-pending' &&
+        result.errorCode !== 'request-already-incoming'
+      ) {
+        setFailed(true);
       }
-      setQuizzesLoading(true);
-      try {
-        const loaded = await getPublicQuizzesByUser(uid);
-        if (!cancelled) setQuizzes(loaded);
-      } catch (err) {
-        console.error('Failed to load public quizzes:', err);
-        if (!cancelled) setQuizzes([]);
-      } finally {
-        if (!cancelled) setQuizzesLoading(false);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [uid]);
-
-  const handleOpenQuiz = useCallback((quizId: string) => {
-    navigate(`/quiz/${quizId}`);
-  }, [navigate]);
-
-  const showLoading = isLoading || quizzesLoading;
+    } finally {
+      setIsBusy(false);
+      refetchFriendships();
+    }
+  };
 
   return (
     <div className="flex-1 bg-primary-50/30 dark:bg-gray-900">
@@ -73,7 +110,7 @@ export function ProfilePage() {
       </header>
 
       <main className="px-4 pb-8">
-        {showLoading ? (
+        {isLoading ? (
           <div className="max-w-[500px] mx-auto" aria-hidden="true">
             <div className="flex flex-col items-center py-6">
               <div className="w-20 h-20 rounded-full bg-gray-200 dark:bg-gray-700 animate-pulse" />
@@ -123,6 +160,55 @@ export function ProfilePage() {
                   Member since {formatDate(profile.createdAt)}
                 </p>
               )}
+
+              {/* Relationship action — hidden on the user's own profile and
+                  while the friendship data is unavailable */}
+              {!isSelf && uid && friendships && (
+                <div className="mt-4 flex flex-col items-center">
+                  {isBusy ? (
+                    <Loader2 className="w-5 h-5 text-gray-400 animate-spin" aria-hidden="true" />
+                  ) : relation === 'incoming' ? (
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" onClick={() => runFriendAction(() => acceptFriendRequest(uid))}>
+                        Accept
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => runFriendAction(() => declineFriendRequest(uid))}
+                      >
+                        Decline
+                      </Button>
+                    </div>
+                  ) : relation === 'friends' ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-red-600 dark:text-red-400"
+                      onClick={() => runFriendAction(() => removeFriend(uid))}
+                    >
+                      Remove Friend
+                    </Button>
+                  ) : relation === 'requested' ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => runFriendAction(() => cancelFriendRequest(uid))}
+                    >
+                      Cancel request
+                    </Button>
+                  ) : (
+                    <Button size="sm" onClick={handleAddFriend}>
+                      Add Friend
+                    </Button>
+                  )}
+                  {failed && (
+                    <p className="mt-2 text-xs text-red-600 dark:text-red-400" role="alert">
+                      Something went wrong — try again.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* First-attempt stats ('—' for legacy users until their next first
@@ -132,31 +218,6 @@ export function ProfilePage() {
               <StatTile value={profile.stats ? `${profile.stats.avgAccuracy}%` : '—'} label="Avg accuracy" tone="green" />
               <StatTile value={profile.stats ? profile.stats.quizzesTaken : '—'} label="Quizzes taken" />
             </div>
-
-            <section aria-label="Public quizzes">
-              <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
-                Public quizzes
-              </h2>
-              {quizzes.length === 0 ? (
-                <p className="text-sm text-gray-500 dark:text-gray-400 py-4 text-center">
-                  No public quizzes yet.
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {quizzes.map((quiz) => (
-                    <PublicQuizCard
-                      key={quiz.id}
-                      quiz={quiz}
-                      ownerName={profile.username}
-                      isSaved={savedIds.has(quiz.id ?? '')}
-                      showSave={!isOwnProfile}
-                      onToggleSave={toggleSave}
-                      onClick={handleOpenQuiz}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
           </div>
         )}
       </main>

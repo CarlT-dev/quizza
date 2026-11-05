@@ -16,7 +16,8 @@ const TAB_INDEX: Record<string, number> = {
   '/': 0,
   '/search': 1,
   '/quizzes': 2,
-  '/status': 3,
+  '/messages': 3,
+  '/status': 4,
 } as const;
 
 /**
