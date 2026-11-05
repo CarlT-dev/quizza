@@ -1,2 +1,2 @@
 export { SearchPage } from './pages/SearchPage';
-export { searchUsernames, getCachedPublicQuizzes, type UsernameSearchResult } from './api/search';
+export { searchUsernames, type UsernameSearchResult } from './api/search';

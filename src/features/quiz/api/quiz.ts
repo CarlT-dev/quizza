@@ -13,7 +13,6 @@ import {
   orderBy,
   limit,
   setDoc,
-  updateDoc,
   deleteDoc,
   getCountFromServer,
   runTransaction,
@@ -29,11 +28,12 @@ export interface QuizDocument {
   topic: string;
   questions: QuizResponse['questions'];
   metadata: QuizResponse['metadata'];
-  visibility: 'public' | 'private';
   createdBy: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
   progress?: QuizProgress;
+  /** Recipient uids this quiz was personally shared with; managed by the messages feature. */
+  sharedWith?: string[];
 }
 
 export interface QuizProgress {
@@ -79,13 +79,6 @@ export interface QuizTitle {
   updatedAt: Timestamp;
 }
 
-/** Row in savedQuizzes — "Save" on the Home feed pulls a public quiz into the user's Quizzes page. */
-export interface SavedQuiz {
-  userId: string;
-  quizId: string;
-  updatedAt: Timestamp;
-}
-
 /** Row in quizFavorites — the star on a quiz card; drives the favorites-first sort. */
 export interface QuizFavorite {
   userId: string;
@@ -115,17 +108,12 @@ export function getCardColor(colorId: CardColorId) {
 /**
  * Saves a generated quiz to Firestore
  */
-export async function saveQuiz(
-  quizData: QuizResponse,
-  userId: string,
-  visibility: 'public' | 'private'
-): Promise<string> {
+export async function saveQuiz(quizData: QuizResponse, userId: string): Promise<string> {
   const quizDoc: Omit<QuizDocument, 'id'> = {
     title: quizData.metadata.title ?? quizData.metadata.topic,
     topic: quizData.metadata.topic,
     questions: quizData.questions,
     metadata: quizData.metadata,
-    visibility,
     createdBy: userId,
     createdAt: serverTimestamp() as Timestamp,
     updatedAt: serverTimestamp() as Timestamp,
@@ -137,20 +125,6 @@ export async function saveQuiz(
   await saveQuizColorPreference(docRef.id, userId, 'primary');
 
   return docRef.id;
-}
-
-/**
- * Updates a quiz's visibility (owner only - enforced by Firestore rules)
- */
-export async function updateQuizVisibility(
-  quizId: string,
-  visibility: 'public' | 'private'
-): Promise<void> {
-  const quizRef = doc(db, 'quizzes', quizId);
-  await updateDoc(quizRef, {
-    visibility,
-    updatedAt: serverTimestamp(),
-  });
 }
 
 /**
@@ -166,7 +140,6 @@ export async function deleteQuiz(quizId: string, userId: string): Promise<void> 
     deleteDoc(doc(db, 'quizAttempts', `${userId}_${quizId}`)),
     deleteDoc(doc(db, 'quizPreferences', `${userId}_${quizId}`)),
     deleteDoc(doc(db, 'quizTitles', `${userId}_${quizId}`)),
-    deleteDoc(doc(db, 'savedQuizzes', `${userId}_${quizId}`)),
     deleteDoc(doc(db, 'quizFavorites', `${userId}_${quizId}`)),
   ]);
   cleanups.forEach(result => {
@@ -219,46 +192,6 @@ export async function getUserQuizCount(userId: string): Promise<number> {
   const q = query(collection(db, 'quizzes'), where('createdBy', '==', userId));
   const snapshot = await getCountFromServer(q);
   return snapshot.data().count;
-}
-
-/**
- * Fetches public quizzes (for discovery)
- */
-export async function getPublicQuizzes(maxCount = 20): Promise<QuizDocument[]> {
-  const q = query(
-    collection(db, 'quizzes'),
-    where('visibility', '==', 'public'),
-    orderBy('createdAt', 'desc'),
-    limit(maxCount)
-  );
-
-  const querySnapshot = await getDocs(q);
-  return querySnapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data()
-  } as QuizDocument));
-}
-
-/**
- * Fetches one user's public quizzes (profile page). Two equality filters +
- * client-side createdAt sort — no orderBy here, which would require a new
- * composite index.
- */
-export async function getPublicQuizzesByUser(userId: string, maxCount = 50): Promise<QuizDocument[]> {
-  const q = query(
-    collection(db, 'quizzes'),
-    where('createdBy', '==', userId),
-    where('visibility', '==', 'public'),
-    limit(maxCount)
-  );
-
-  const querySnapshot = await getDocs(q);
-  return querySnapshot.docs
-    .map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as QuizDocument))
-    .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
 }
 
 /**
@@ -318,31 +251,6 @@ export async function getQuizzesProgress(quizIds: string[], userId: string): Pro
   }
 
   return progressMap;
-}
-
-/**
- * Saves a public quiz to the user's Quizzes page ("Save" on the Home feed).
- * Distinct from favorites: saving pulls the quiz into your list, favoriting
- * only marks it for sort priority.
- */
-export async function saveQuizForUser(quizId: string, userId: string): Promise<void> {
-  await setDoc(doc(db, 'savedQuizzes', `${userId}_${quizId}`), {
-    userId,
-    quizId,
-    updatedAt: serverTimestamp(),
-  });
-}
-
-/** Removes a quiz from the user's saved list. */
-export async function unsaveQuiz(quizId: string, userId: string): Promise<void> {
-  await deleteDoc(doc(db, 'savedQuizzes', `${userId}_${quizId}`));
-}
-
-/** The user's saved-quiz rows (quiz docs themselves are fetched separately). */
-export async function getSavedQuizzes(userId: string): Promise<SavedQuiz[]> {
-  const q = query(collection(db, 'savedQuizzes'), where('userId', '==', userId));
-  const querySnapshot = await getDocs(q);
-  return querySnapshot.docs.map(docSnap => docSnap.data() as SavedQuiz);
 }
 
 /** Marks a quiz as favorite (the star on a quiz card). */

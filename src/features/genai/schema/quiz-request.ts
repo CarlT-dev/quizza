@@ -6,7 +6,6 @@
 export type QuestionType = 'multiple_choice' | 'true_false' | 'identification' | 'enumeration';
 export type Difficulty = 'easy' | 'medium' | 'hard';
 export type ItemCount = 10 | 15 | 20 | 30;
-export type Visibility = 'public' | 'private';
 
 export interface QuizRequest {
   /** The topic or source text for quiz generation */
@@ -17,8 +16,6 @@ export interface QuizRequest {
   difficulties: Difficulty[];
   /** Number of questions to generate */
   itemCount: ItemCount;
-  /** Visibility of the generated quiz */
-  visibility: Visibility;
   /** Optional: Additional context or instructions */
   additionalContext?: string;
 }
@@ -31,7 +28,6 @@ export function createQuizRequest(params: {
   questionTypes: Array<'single' | 'multiple' | 'identification' | 'enumeration'>;
   difficulties: Array<'easy' | 'medium' | 'hard'>;
   itemCount: number | null;
-  isPublic: boolean;
   additionalContext?: string;
 }): QuizRequest | null {
   if (!params.topic.trim()) {
@@ -60,7 +56,6 @@ export function createQuizRequest(params: {
     questionTypes: params.questionTypes.map(qt => questionTypeMap[qt]),
     difficulties: params.difficulties,
     itemCount: params.itemCount as ItemCount,
-    visibility: params.isPublic ? 'public' : 'private',
     additionalContext: params.additionalContext?.trim(),
   };
 }

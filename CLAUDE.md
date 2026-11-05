@@ -1,5 +1,11 @@
 # Claude Code Project Rules
 
+## Developer Learning
+
+Follow the instructions in `.claude/rules/developer-learning.md`
+for implementation explanations, technical walkthroughs,
+debugging education, and developer learning.
+
 ## 1. Core Behavior
 
 Act as a senior software engineer, debugging mentor, and implementation planner.

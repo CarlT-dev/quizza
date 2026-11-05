@@ -11,6 +11,7 @@ import { QuizzesPage } from '@/features/quizzes';
 import { SearchPage } from '@/features/search';
 import { QuizPage, ScorePage, ResultPage, StatusPage } from '@/features/[quiz]';
 import { ProfilePage } from '@/features/users';
+import { MessagesPage, ConvoPage } from '@/features/messages';
 
 export function AppRoutes() {
   return (
@@ -29,6 +30,8 @@ export function AppRoutes() {
           <Route path="/quiz/:quiz/score" element={<Layout><ScorePage /></Layout>} />
           <Route path="/quiz/:quiz/result" element={<Layout><ResultPage /></Layout>} />
           <Route path="/status" element={<Layout title="Status" showFooterNav><StatusPage /></Layout>} />
+          <Route path="/messages" element={<Layout title="Messages" showFooterNav><MessagesPage /></Layout>} />
+          <Route path="/messages/:uid" element={<Layout title="Conversation"><ConvoPage /></Layout>} />
           <Route path="/user" element={<Navigate to="/404" replace />} />
           <Route path="/user/:uid" element={<Layout title="Profile"><ProfilePage /></Layout>} />
         </Route>

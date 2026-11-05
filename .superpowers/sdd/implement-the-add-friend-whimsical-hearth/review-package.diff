@@ -1,0 +1,320 @@
+diff --git a/firestore.rules b/firestore.rules
+index 4d6db3b..ed4090d 100644
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -116,5 +116,48 @@ service cloud.firestore {
+           get(/databases/$(database)/documents/convos/$(convoId)).data.participants;
+       }
+     }
++
++    // 8. friendships - one doc per pair; the doc id IS the sorted uids joined
++    // by _ (same convention as convos), so a request from A to B and from B
++    // to A can only ever land on one document.
++    match /friendships/{friendshipId} {
++      allow read: if request.auth != null &&
++        request.auth.uid in resource.data.participants;
++
++      allow create: if request.auth != null &&
++        request.resource.data.status == 'pending' &&
++        request.resource.data.requestedBy == request.auth.uid &&
++        request.resource.data.participants.size() == 2 &&
++        request.resource.data.participants[0] != request.resource.data.participants[1] &&
++        request.auth.uid in request.resource.data.participants &&
++        // Canonical id only: participants must be sorted and must equal the
++        // doc id, so no client can shadow the pair with a second document
++        request.resource.data.participants[0] < request.resource.data.participants[1] &&
++        friendshipId == request.resource.data.participants[0] + '_' + request.resource.data.participants[1] &&
++        // Both sides must be real accounts (register always writes users/{uid})
++        exists(/databases/$(database)/documents/users/$(request.resource.data.participants[0])) &&
++        exists(/databases/$(database)/documents/users/$(request.resource.data.participants[1])) &&
++        // createdAt must be server-generated, not a client-forged timestamp
++        request.resource.data.createdAt == request.time;
++
++      // Status changes are one-way and requester-proof: only the participant
++      // who did NOT send the request may flip pending -> accepted, and
++      // participants/requestedBy/createdAt are immutable (mirrors the convos
++      // participants-immutability rule)
++      allow update: if request.auth != null &&
++        request.auth.uid in resource.data.participants &&
++        request.auth.uid != resource.data.requestedBy &&
++        resource.data.status == 'pending' &&
++        request.resource.data.participants == resource.data.participants &&
++        request.resource.data.requestedBy == resource.data.requestedBy &&
++        request.resource.data.createdAt == resource.data.createdAt &&
++        request.resource.data.status == 'accepted' &&
++        request.resource.data.respondedAt == request.time;
++
++      // Decline, cancel and unfriend are all deletes: either participant may
++      // remove the doc, which frees the pair id for a future re-request
++      allow delete: if request.auth != null &&
++        request.auth.uid in resource.data.participants;
++    }
+   }
+ }
+\ No newline at end of file
+diff --git a/src/app/routes/routes.tsx b/src/app/routes/routes.tsx
+index ece583e..a5f6c54 100644
+--- a/src/app/routes/routes.tsx
++++ b/src/app/routes/routes.tsx
+@@ -12,6 +12,7 @@ import { SearchPage } from '@/features/search';
+ import { QuizPage, ScorePage, ResultPage, StatusPage } from '@/features/[quiz]';
+ import { ProfilePage } from '@/features/users';
+ import { MessagesPage, ConvoPage } from '@/features/messages';
++import { FriendsPage } from '@/features/friends';
+ 
+ export function AppRoutes() {
+   return (
+@@ -32,6 +33,7 @@ export function AppRoutes() {
+           <Route path="/status" element={<Layout title="Status" showFooterNav><StatusPage /></Layout>} />
+           <Route path="/messages" element={<Layout title="Messages" showFooterNav><MessagesPage /></Layout>} />
+           <Route path="/messages/:uid" element={<Layout title="Conversation"><ConvoPage /></Layout>} />
++          <Route path="/friends" element={<Layout title="Friends"><FriendsPage /></Layout>} />
+           <Route path="/user" element={<Navigate to="/404" replace />} />
+           <Route path="/user/:uid" element={<Layout title="Profile"><ProfilePage /></Layout>} />
+         </Route>
+diff --git a/src/features/messages/components/ShareQuizPanel.tsx b/src/features/messages/components/ShareQuizPanel.tsx
+index d719f71..f8ff755 100644
+--- a/src/features/messages/components/ShareQuizPanel.tsx
++++ b/src/features/messages/components/ShareQuizPanel.tsx
+@@ -4,6 +4,8 @@ import { SlidePanel } from '@/shared/components/ui/SlidePanel';
+ import { useDebouncedValue } from '@/shared/hooks';
+ import { useAuth } from '@/features/auth';
+ import { searchUsernames, type UsernameSearchResult } from '@/features/search';
++import { getUserProfile } from '@/features/users';
++import { getOtherParticipantUid, useFriendships } from '@/features/friends';
+ import { shareQuizToUser } from '../api/messages';
+ import type { QuizDocument } from '@/features/quiz/api/quiz';
+ 
+@@ -42,6 +44,35 @@ function SharePicker({ quiz }: { quiz: QuizDocument }) {
+   const [isSearching, setIsSearching] = useState(false);
+   const [error, setError] = useState<string | null>(null);
+   const [shareStates, setShareStates] = useState<Record<string, RowShareState>>({});
++  const { friendships, isLoading: friendsLoading } = useFriendships();
++  const [friendNames, setFriendNames] = useState<Record<string, string>>({});
++
++  // Resolve each friend's current username — fresh per panel open, so
++  // renames show up. Falls back to a uid slice (same as MessagesPage).
++  useEffect(() => {
++    if (!user || !friendships) return;
++    let cancelled = false;
++
++    void Promise.resolve().then(async () => {
++      const otherUids = [...new Set(friendships.friends.map(f => getOtherParticipantUid(f, user.uid)))];
++      const resolved = await Promise.all(
++        otherUids.map(async uid => {
++          try {
++            const profile = await getUserProfile(uid);
++            return [uid, profile?.username ?? uid.slice(0, 8)] as const;
++          } catch (err) {
++            console.error('Failed to load profile:', err);
++            return [uid, uid.slice(0, 8)] as const;
++          }
++        })
++      );
++      if (!cancelled) setFriendNames(Object.fromEntries(resolved));
++    });
++
++    return () => {
++      cancelled = true;
++    };
++  }, [user, friendships]);
+ 
+   // Debounced people search — same deferred pattern as SearchPage
+   useEffect(() => {
+@@ -93,8 +124,17 @@ function SharePicker({ quiz }: { quiz: QuizDocument }) {
+     }
+   }, [user, quiz]);
+ 
+-  // Never offer yourself as a share target
+-  const candidates = people.filter(person => person.uid !== user?.uid);
++  // Never offer yourself as a share target, and hide accepted friends from
++  // search — they're already in the quick-pick above. Pending contacts stay
++  // searchable: sharing remains open to any user.
++  const friendUids = new Set(
++    user && friendships
++      ? friendships.friends.map(f => getOtherParticipantUid(f, user.uid))
++      : []
++  );
++  const candidates = people.filter(
++    person => person.uid !== user?.uid && !friendUids.has(person.uid)
++  );
+   const hasQuery = query.trim().length > 0;
+ 
+   return (
+@@ -103,6 +143,45 @@ function SharePicker({ quiz }: { quiz: QuizDocument }) {
+         Send <span className="font-medium text-gray-900 dark:text-gray-100">{quiz.title}</span> to someone.
+       </p>
+ 
++      {/* Friends quick-pick: one tap shares immediately. Hidden entirely when
++          this account has no friends yet — adding friends lives on /friends. */}
++      {friendsLoading && !friendships ? (
++        <div
++          className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden"
++          aria-hidden="true"
++        >
++          <div className="flex items-center gap-3 px-4 py-3">
++            <div className="w-11 h-11 rounded-full skeleton" />
++            <div className="flex-1">
++              <div className="h-4 w-28 skeleton skeleton-rounded" />
++            </div>
++          </div>
++        </div>
++      ) : friendships && user && friendships.friends.length > 0 ? (
++        <section aria-label="Friends">
++          <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
++            Friends
++          </h2>
++          <div className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
++            {friendships.friends.map((friendship) => {
++              const uid = getOtherParticipantUid(friendship, user.uid);
++              const person: UsernameSearchResult = {
++                uid,
++                username: friendNames[uid] ?? uid.slice(0, 8),
++              };
++              return (
++                <PersonRow
++                  key={uid}
++                  person={person}
++                  state={shareStates[uid]}
++                  onPick={handleShare}
++                />
++              );
++            })}
++          </div>
++        </section>
++      ) : null}
++
+       <div className="relative">
+         <Search
+           className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none"
+@@ -141,45 +220,63 @@ function SharePicker({ quiz }: { quiz: QuizDocument }) {
+         </p>
+       ) : (
+         <div className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+-          {candidates.map((person) => {
+-            const state = shareStates[person.uid];
+-            const isSettled = state === 'sharing' || state === 'sent';
+-            return (
+-              <button
+-                key={person.uid}
+-                type="button"
+-                disabled={isSettled}
+-                onClick={() => handleShare(person)}
+-                className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors disabled:cursor-default disabled:hover:bg-transparent"
+-              >
+-                <span className="w-11 h-11 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-600 dark:text-primary-400 font-medium text-lg flex-shrink-0">
+-                  {person.username.charAt(0).toUpperCase()}
+-                </span>
+-                <span className="flex-1 min-w-0 font-bold text-sm text-gray-900 dark:text-gray-100 truncate">
+-                  @{person.username}
+-                </span>
+-                {state === 'sharing' && (
+-                  <Loader2 className="w-5 h-5 text-gray-400 animate-spin flex-shrink-0" aria-hidden="true" />
+-                )}
+-                {state === 'sent' && (
+-                  <span className="flex items-center gap-1 text-sm font-medium text-green-600 dark:text-green-400 flex-shrink-0">
+-                    <Check className="w-4 h-4" aria-hidden="true" />
+-                    Sent
+-                  </span>
+-                )}
+-                {state === 'error' && (
+-                  <span className="text-sm text-red-600 dark:text-red-400 flex-shrink-0" role="alert">
+-                    Failed — tap to retry
+-                  </span>
+-                )}
+-                {!state && (
+-                  <Share2 className="w-4 h-4 text-gray-400 flex-shrink-0" aria-hidden="true" />
+-                )}
+-              </button>
+-            );
+-          })}
++          {candidates.map((person) => (
++            <PersonRow
++              key={person.uid}
++              person={person}
++              state={shareStates[person.uid]}
++              onPick={handleShare}
++            />
++          ))}
+         </div>
+       )}
+     </div>
+   );
+ }
++
++interface PersonRowProps {
++  person: UsernameSearchResult;
++  /** Undefined while untouched; then sharing → sent or error in place. */
++  state?: RowShareState;
++  onPick: (person: UsernameSearchResult) => void;
++}
++
++/**
++ * One shareable person row — avatar, @username and the current share
++ * outcome. Used for both the friends quick-pick and search results.
++ */
++function PersonRow({ person, state, onPick }: PersonRowProps) {
++  const isSettled = state === 'sharing' || state === 'sent';
++  return (
++    <button
++      type="button"
++      disabled={isSettled}
++      onClick={() => onPick(person)}
++      className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors disabled:cursor-default disabled:hover:bg-transparent"
++    >
++      <span className="w-11 h-11 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-600 dark:text-primary-400 font-medium text-lg flex-shrink-0">
++        {person.username.charAt(0).toUpperCase()}
++      </span>
++      <span className="flex-1 min-w-0 font-bold text-sm text-gray-900 dark:text-gray-100 truncate">
++        @{person.username}
++      </span>
++      {state === 'sharing' && (
++        <Loader2 className="w-5 h-5 text-gray-400 animate-spin flex-shrink-0" aria-hidden="true" />
++      )}
++      {state === 'sent' && (
++        <span className="flex items-center gap-1 text-sm font-medium text-green-600 dark:text-green-400 flex-shrink-0">
++          <Check className="w-4 h-4" aria-hidden="true" />
++          Sent
++        </span>
++      )}
++      {state === 'error' && (
++        <span className="text-sm text-red-600 dark:text-red-400 flex-shrink-0" role="alert">
++          Failed — tap to retry
++        </span>
++      )}
++      {!state && (
++        <Share2 className="w-4 h-4 text-gray-400 flex-shrink-0" aria-hidden="true" />
++      )}
++    </button>
++  );
++}
+diff --git a/src/features/messages/pages/MessagesPage.tsx b/src/features/messages/pages/MessagesPage.tsx
+index c25d27f..fc0c069 100644
+--- a/src/features/messages/pages/MessagesPage.tsx
++++ b/src/features/messages/pages/MessagesPage.tsx
+@@ -1,6 +1,6 @@
+ import { useState, useEffect } from 'react';
+-import { useNavigate } from 'react-router-dom';
+-import { ChevronRight, AlertTriangle, MessageCircle } from 'lucide-react';
++import { Link, useNavigate } from 'react-router-dom';
++import { ChevronRight, AlertTriangle, MessageCircle, Users } from 'lucide-react';
+ import { useAuth } from '@/features/auth';
+ import { getUserProfile } from '@/features/users';
+ import { formatRelativeTime } from '@/shared/utils';
+@@ -155,8 +155,15 @@ export function MessagesPage() {
+ 
+   return (
+     <div className="flex-1 bg-primary-50/30 dark:bg-gray-900">
+-      <header className="flex items-center px-4 py-3 mb-4 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
++      <header className="flex items-center justify-between px-4 py-3 mb-4 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+         <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Messages</h1>
++        <Link
++          to="/friends"
++          aria-label="Friends"
++          className="p-1.5 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
++        >
++          <Users className="w-5 h-5" aria-hidden="true" />
++        </Link>
+       </header>
+ 
+       <main className="pb-20">

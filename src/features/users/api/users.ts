@@ -21,26 +21,6 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   return { uid, ...snap.data() } as UserProfile;
 }
 
-/**
- * Resolves several profiles at once with parallel per-doc gets — the users
- * collection has no list permission for other users' docs, so an 'in' query
- * is not an option here.
- */
-export async function getUsersByIds(uids: string[]): Promise<Map<string, UserProfile>> {
-  const profiles = new Map<string, UserProfile>();
-  if (uids.length === 0) return profiles;
-
-  const results = await Promise.allSettled(
-    uids.map(async (uid) => ({ uid, profile: await getUserProfile(uid) }))
-  );
-  results.forEach(result => {
-    if (result.status === 'fulfilled' && result.value.profile) {
-      profiles.set(result.value.uid, result.value.profile);
-    }
-  });
-  return profiles;
-}
-
 /** Persists the denormalized stats copy that other users read on the profile page. */
 export async function saveUserStats(userId: string, stats: UserStats): Promise<void> {
   await setDoc(doc(db, 'users', userId), { stats, updatedAt: new Date().toISOString() }, { merge: true });
