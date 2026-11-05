@@ -62,8 +62,16 @@ service cloud.firestore {
     }
 
     match /quizAttempts/{attemptId} {
+      // Self-access, plus READ-ONLY access for the owner of the quiz the
+      // attempt belongs to (the per-quiz results view). exists() guards get()
+      // so a quiz deleted after attempts were saved evaluates false instead of
+      // erroring the rule (same exists()/get() pairing as the convos/shares
+      // read rule).
       allow read: if request.auth != null &&
-        (resource == null || resource.data.userId == request.auth.uid);
+        (resource == null ||
+         resource.data.userId == request.auth.uid ||
+         (exists(/databases/$(database)/documents/quizzes/$(resource.data.quizId)) &&
+          get(/databases/$(database)/documents/quizzes/$(resource.data.quizId)).data.createdBy == request.auth.uid));
 
       allow create: if request.auth != null &&
         request.resource.data.userId == request.auth.uid;
