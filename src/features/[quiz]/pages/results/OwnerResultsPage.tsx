@@ -84,7 +84,7 @@ export function OwnerResultsPage() {
         const builtRows: QuizResultRow[] = completed.map(attempt => {
           const profile = profileByUid.get(attempt.userId) ?? null;
           const displayName =
-            profile?.displayName || profile?.username || profile?.email?.split('@')[0] || 'Unknown';
+            profile?.name ?? profile?.displayName ?? profile?.username ?? profile?.email?.split('@')[0] ?? 'Unknown';
           // Legacy docs completed before firstScore existed may lack both;
           // score itself is optional on the schema.
           const score = attempt.score ?? attempt.firstScore ?? null;

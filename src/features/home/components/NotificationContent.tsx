@@ -46,7 +46,7 @@ export function NotificationContent() {
         actorUids.map(async uid => {
           try {
             const profile = await getUserProfile(uid);
-            return [uid, profile?.username ?? uid.slice(0, 8)] as const;
+            return [uid, profile?.name ?? profile?.username ?? uid.slice(0, 8)] as const;
           } catch (err) {
             console.error('Failed to load profile:', err);
             return [uid, uid.slice(0, 8)] as const;
@@ -149,7 +149,7 @@ export function NotificationContent() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-gray-700 dark:text-gray-300">
-                      <span className="font-medium text-gray-900 dark:text-gray-100">@{name}</span>{' '}
+                      <span className="font-medium text-gray-900 dark:text-gray-100">{name}</span>{' '}
                       shared{' '}
                       <span className="font-medium text-gray-900 dark:text-gray-100">
                         {notification.quizTitle ?? 'a quiz'}
@@ -181,7 +181,7 @@ export function NotificationContent() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-gray-700 dark:text-gray-300">
-                    <span className="font-medium text-gray-900 dark:text-gray-100">@{name}</span>{' '}
+                    <span className="font-medium text-gray-900 dark:text-gray-100">{name}</span>{' '}
                     accepted your friend request
                   </p>
                   <p className="mt-1.5 text-xs text-gray-400 dark:text-gray-500">
@@ -206,7 +206,7 @@ export function NotificationContent() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    @{name} sent you a friend request
+                    {name} sent you a friend request
                   </p>
                   <p className="mt-1.5 text-xs text-gray-400 dark:text-gray-500">
                     {formatRelativeTime(notification.createdAt)}

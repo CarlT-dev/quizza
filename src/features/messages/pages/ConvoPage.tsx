@@ -36,7 +36,7 @@ export function ConvoPage() {
   // on the first frame, no fetch), then a uid slice for direct URL entry.
   const stateUsername = (location.state as { username?: string } | null)?.username;
   const displayName =
-    profile?.username ?? stateUsername ?? (otherUid ? otherUid.slice(0, 8) : '?');
+    profile?.name ?? profile?.username ?? stateUsername ?? (otherUid ? otherUid.slice(0, 8) : '?');
 
   useEffect(() => {
     if (authLoading) return;
@@ -231,7 +231,7 @@ export function ConvoPage() {
                 <span className="block text-xs opacity-80 truncate">{share.topic}</span>
               )}
               <span className="block text-xs mt-1 opacity-70">
-                {isMine ? 'You' : `@${displayName}`} · {formatRelativeTime(share.sharedAt)} · Tap to play
+                {isMine ? 'You' : displayName} · {formatRelativeTime(share.sharedAt)} · Tap to play
               </span>
             </button>
           );
@@ -349,9 +349,16 @@ export function ConvoPage() {
         <span className="w-9 h-9 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-600 dark:text-primary-400 font-medium flex-shrink-0">
           {displayName.charAt(0).toUpperCase()}
         </span>
-        <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100 min-w-0 truncate">
-          @{displayName}
-        </h1>
+        <div className="flex-1 min-w-0">
+          <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100 min-w-0 truncate">
+            {displayName}
+          </h1>
+          {profile?.name && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+              @{profile.username}
+            </p>
+          )}
+        </div>
       </header>
 
       <main className="pb-8">
@@ -373,7 +380,7 @@ export function ConvoPage() {
       <BottomSheet
         isOpen={isShareOpen}
         onClose={() => setIsShareOpen(false)}
-        title={`Share with @${displayName}`}
+        title={`Share with ${displayName}`}
       >
         {renderShareSheetContent()}
       </BottomSheet>

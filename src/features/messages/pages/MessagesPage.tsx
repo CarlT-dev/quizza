@@ -74,7 +74,7 @@ export function MessagesPage() {
         otherUids.map(async uid => {
           try {
             const profile = await getUserProfile(uid);
-            return [uid, profile?.username ?? uid.slice(0, 8)] as const;
+            return [uid, profile?.name ?? profile?.username ?? uid.slice(0, 8)] as const;
           } catch (err) {
             console.error('Failed to load profile:', err);
             return [uid, uid.slice(0, 8)] as const;
@@ -178,10 +178,10 @@ export function MessagesPage() {
                 </span>
                 <span className="flex-1 min-w-0">
                   <span className="block font-bold text-sm text-gray-900 dark:text-gray-100 truncate">
-                    @{name}
+                    {name}
                   </span>
                   <span className="block text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
-                    {convo.lastQuizTitle} · {formatRelativeTime(convo.lastShareAt)}
+                    @{name} · {convo.lastQuizTitle} · {formatRelativeTime(convo.lastShareAt)}
                   </span>
                 </span>
                 <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" aria-hidden="true" />
@@ -202,10 +202,10 @@ export function MessagesPage() {
                 </span>
                 <span className="flex-1 min-w-0">
                   <span className="block font-bold text-sm text-gray-900 dark:text-gray-100 truncate">
-                    @{name}
+                    {name}
                   </span>
                   <span className="block text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
-                    No shared quizzes yet
+                    @{name} · No shared quizzes yet
                   </span>
                 </span>
                 <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" aria-hidden="true" />
