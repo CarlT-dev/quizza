@@ -167,11 +167,22 @@ export function ProfilePage() {
 
                 {/* Username & Display Name */}
                 <div className="mt-4">
-                  <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                    @{profile.username}
-                  </h2>
-                  {profile.displayName && profile.displayName !== profile.username && (
-                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{profile.displayName}</p>
+                  {profile.name ? (
+                    <>
+                      <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                        {profile.name}
+                      </h2>
+                      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">@{profile.username}</p>
+                    </>
+                  ) : (
+                    <>
+                      <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                        @{profile.username}
+                      </h2>
+                      {profile.displayName && profile.displayName !== profile.username && (
+                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{profile.displayName}</p>
+                      )}
+                    </>
                   )}
                 </div>
 

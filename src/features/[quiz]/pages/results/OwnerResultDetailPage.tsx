@@ -121,7 +121,7 @@ export function OwnerResultDetailPage() {
         }
 
         const displayName =
-          profile?.displayName || profile?.username || profile?.email?.split('@')[0] || 'Unknown';
+          profile?.name ?? profile?.displayName ?? profile?.username ?? profile?.email?.split('@')[0] ?? 'Unknown';
         const score = attemptData.score ?? attemptData.firstScore ?? null;
         const percentage =
           score && score.total > 0

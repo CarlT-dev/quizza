@@ -8,7 +8,8 @@ export interface UserProfile {
   uid: string;
   username: string;
   email?: string;
-  displayName?: string;
+  displayName?: string;   // Legacy field, can be deprecated
+  name?: string;          // User's display name (required for new users)
   createdAt?: string;
   bio?: string;           // User bio (max 160 chars)
   /** Denormalized first-attempt stats; written on first completions, read by other users. */
@@ -119,6 +120,36 @@ export async function updateBio(userId: string, bio: string): Promise<void> {
   if (username) {
     batch.update(doc(db, 'usernames', username), {
       bio: trimmedBio,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  await batch.commit();
+}
+
+/**
+ * Updates the user's display name on both users/{uid} and usernames/{username} documents.
+ * This ensures the name appears in search results and profile views.
+ */
+export async function updateName(userId: string, name: string): Promise<void> {
+  const trimmedName = name.trim().slice(0, 50); // Max 50 characters
+
+  // Get current username to update the usernames collection
+  const profileSnap = await getDoc(doc(db, 'users', userId));
+  const username = (profileSnap.data()?.username as string | undefined)?.toLowerCase() ?? '';
+
+  const batch = writeBatch(db);
+
+  // Update users/{uid}
+  batch.update(doc(db, 'users', userId), {
+    name: trimmedName,
+    updatedAt: new Date().toISOString(),
+  });
+
+  // Update usernames/{username} for search results
+  if (username) {
+    batch.update(doc(db, 'usernames', username), {
+      name: trimmedName,
       updatedAt: new Date().toISOString(),
     });
   }

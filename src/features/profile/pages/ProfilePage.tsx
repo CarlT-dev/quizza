@@ -70,6 +70,7 @@ export function ProfilePage() {
           <div className="max-w-[500px] mx-auto">
             <ProfileHeader
               username={profile.username}
+              name={profile.name}
               displayName={profile.displayName}
               bio={profile.bio}
               createdAt={profile.createdAt}

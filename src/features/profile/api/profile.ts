@@ -17,6 +17,7 @@ export interface CurrentUserProfile {
   uid: string;
   username: string;
   displayName?: string;
+  name?: string;          // User's display name
   createdAt?: string;
   bio?: string;
   quizzesCreated: number;
@@ -51,6 +52,7 @@ export async function getCurrentUserProfile(userId: string): Promise<CurrentUser
     uid: userId,
     username: profileData.username,
     displayName: profileData.displayName,
+    name: profileData.name,
     createdAt: profileData.createdAt,
     bio: profileData.bio,
     quizzesCreated,

@@ -4,6 +4,7 @@ import { db } from '@/lib/firebase';
 export interface UsernameSearchResult {
   username: string;
   uid: string;
+  name?: string;
   bio?: string;
 }
 
@@ -28,6 +29,7 @@ export async function searchUsernames(prefix: string, maxCount = 10): Promise<Us
     .map(d => ({
       username: d.id,
       uid: (d.data().uid as string | undefined) ?? '',
+      name: (d.data().name as string | undefined) ?? undefined,
       bio: (d.data().bio as string | undefined) ?? undefined
     }))
     .filter(r => Boolean(r.uid));

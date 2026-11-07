@@ -5,6 +5,7 @@ import { formatDate } from '../pages/ProfilePage';
 
 interface ProfileHeaderProps {
   username: string;
+  name?: string;
   displayName?: string;
   bio?: string;
   createdAt?: string;
@@ -19,6 +20,7 @@ const MAX_BIO_LENGTH = 160;
 
 export function ProfileHeader({
   username,
+  name,
   displayName,
   bio,
   createdAt,
@@ -83,11 +85,22 @@ export function ProfileHeader({
 
         {/* Username & Display Name */}
         <div className="mt-4">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-            @{username}
-          </h2>
-          {displayName && displayName !== username && (
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{displayName}</p>
+          {name ? (
+            <>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                {name}
+              </h2>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">@{username}</p>
+            </>
+          ) : (
+            <>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                @{username}
+              </h2>
+              {displayName && displayName !== username && (
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{displayName}</p>
+              )}
+            </>
           )}
         </div>
 
