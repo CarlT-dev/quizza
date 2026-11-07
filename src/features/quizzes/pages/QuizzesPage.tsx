@@ -190,6 +190,10 @@ export function QuizzesPage() {
     setShareQuiz(quizzes.find(q => q.id === quizId) ?? null);
   }, [quizzes]);
 
+  const handleViewResults = useCallback((quizId: string) => {
+    navigate(`/quiz/${quizId}/results`);
+  }, [navigate]);
+
   const handleCreateQuiz = useCallback(() => {
     navigate('/create-quiz');
   }, [navigate]);
@@ -398,6 +402,7 @@ export function QuizzesPage() {
           onDelete={handleDeleteQuiz}
           onToggleFavorite={toggleFavorite}
           onShare={handleShareQuiz}
+          onViewResults={handleViewResults}
         />
       );
     });

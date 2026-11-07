@@ -4,8 +4,7 @@ import { User, Lock, SquarePen, LogOut, ChevronDown, UserPlus, Check, X } from '
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useAuth } from '@/features/auth/context/AuthContext';
-import { renameUsername } from '@/features/users';
-import { username as usernameValidator } from '@/shared/validations/fields';
+import { updateName } from '@/features/users';
 import { Button, Card } from '@/shared/components/ui';
 
 // Mock additional accounts - in real app this would come from auth context/localStorage
@@ -27,16 +26,15 @@ export function UserMenuContent() {
   const { user, signOut } = useAuth();
   const [isProfileExpanded, setIsProfileExpanded] = useState(false);
 
-  // Username editing state
-  const [isEditingUsername, setIsEditingUsername] = useState(false);
-  const [usernameDraft, setUsernameDraft] = useState('');
-  const [isSavingUsername, setIsSavingUsername] = useState(false);
-  const [usernameError, setUsernameError] = useState<string | null>(null);
-
-  const username = user?.displayName || user?.email?.split('@')[0] || 'User';
-  const [localName, setLocalName] = useState(username);
+  // Name editing state
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+  const [isSavingName, setIsSavingName] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
+  // Displayed name state - initialized from Firebase Auth but updated optimistically after Firestore save
+  const [displayName, setDisplayName] = useState(user?.displayName || user?.email?.split('@')[0] || 'User');
   const userEmail = user?.email || '';
-  const userInitial = username.charAt(0).toUpperCase();
+  const userInitial = displayName.charAt(0).toUpperCase();
 
   const isPasswordProvider = user?.providerData.some(p => p.providerId === 'password') ?? false;
 
@@ -69,43 +67,41 @@ export function UserMenuContent() {
     }
   };
 
-  const handleEditUsername = () => {
-    setUsernameDraft(localName);
-    setUsernameError(null);
-    setIsEditingUsername(true);
+  const handleEditName = () => {
+    setNameDraft(displayName);
+    setNameError(null);
+    setIsEditingName(true);
   };
 
-  // Full rename flow (was: Auth displayName only, which left users/{uid}.username
-  // stale and the usernames/ reverse-lookup doc unrenamed). Validates the format
-  // first, then hands off to the atomic API (availability check + usernames swap
-  // + Auth/users update). Inline errors instead of alert().
-  const handleSaveUsername = async () => {
-    const trimmed = usernameDraft.trim();
+  const handleSaveName = async () => {
+    const trimmed = nameDraft.trim();
     if (!trimmed || !user) {
-      setIsEditingUsername(false);
+      setIsEditingName(false);
       return;
     }
 
-    const validationError = usernameValidator(trimmed);
-    if (validationError) {
-      setUsernameError(validationError.message);
+    if (trimmed.length > 50) {
+      setNameError('Name must be at most 50 characters');
       return;
     }
 
-    setIsSavingUsername(true);
-    setUsernameError(null);
-    const result = await renameUsername(trimmed);
-    if (result.success) {
-      setLocalName(trimmed.toLowerCase());
-      setIsEditingUsername(false);
-    } else {
-      setUsernameError(
-        result.errorCode === 'username-taken'
-          ? 'This username is already taken'
-          : 'Failed to update username. Please try again.'
-      );
+    setIsSavingName(true);
+    setNameError(null);
+    try {
+      await updateName(user.uid, trimmed);
+      // Optimistically update the displayed name
+      setDisplayName(trimmed);
+      setIsEditingName(false);
+    } catch (err) {
+      console.error('Failed to update name:', err);
+      setNameError('Failed to update name. Please try again.');
     }
-    setIsSavingUsername(false);
+    setIsSavingName(false);
+  };
+
+  const handleCancelName = () => {
+    setNameError(null);
+    setIsEditingName(false);
   };
 
   return (
@@ -124,7 +120,7 @@ export function UserMenuContent() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-bold text-base text-text-primary dark:text-gray-100 truncate">
-                {localName}
+                {displayName}
               </p>
               <p className="text-sm text-gray-400 dark:text-gray-500 truncate mt-0.5">
                 {userEmail}
@@ -254,46 +250,43 @@ export function UserMenuContent() {
             <span className="w-11 h-11 rounded-xl bg-primary-100 dark:bg-primary-500/15 flex items-center justify-center flex-shrink-0" aria-hidden="true">
               <User className="w-5 h-5 text-primary dark:text-primary-400" />
             </span>
-            {isEditingUsername ? (
+            {isEditingName ? (
               <form
                 className="flex-1 flex items-center gap-2 min-w-0"
-                onSubmit={(e) => { e.preventDefault(); handleSaveUsername(); }}
+                onSubmit={(e) => { e.preventDefault(); handleSaveName(); }}
               >
                 <div className="flex-1 flex flex-col min-w-0">
-                  <span className="text-base font-bold text-text-primary dark:text-gray-100">Username</span>
+                  <span className="text-base font-bold text-text-primary dark:text-gray-100">Name</span>
                   <input
                     type="text"
-                    value={usernameDraft}
-                    onChange={(e) => setUsernameDraft(e.target.value)}
+                    value={nameDraft}
+                    onChange={(e) => setNameDraft(e.target.value)}
                     className="mt-1 w-full text-sm font-medium text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-900 border-2 border-primary-500 rounded-lg px-2 py-0.5 focus:outline-none"
                     autoFocus
-                    aria-label="Edit username"
-                    aria-invalid={usernameError ? true : undefined}
-                    disabled={isSavingUsername}
+                    aria-label="Edit name"
+                    aria-invalid={nameError ? true : undefined}
+                    disabled={isSavingName}
                   />
-                  {usernameError && (
+                  {nameError && (
                     <p className="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">
-                      {usernameError}
+                      {nameError}
                     </p>
                   )}
                 </div>
                 <button
                   type="submit"
                   className="p-1.5 rounded-lg text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-colors disabled:opacity-50 flex-shrink-0"
-                  aria-label="Save username"
-                  disabled={isSavingUsername}
+                  aria-label="Save name"
+                  disabled={isSavingName}
                 >
                   <Check className="w-4 h-4" aria-hidden="true" />
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setUsernameError(null);
-                    setIsEditingUsername(false);
-                  }}
+                  onClick={handleCancelName}
                   className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 flex-shrink-0"
                   aria-label="Cancel editing"
-                  disabled={isSavingUsername}
+                  disabled={isSavingName}
                 >
                   <X className="w-4 h-4" aria-hidden="true" />
                 </button>
@@ -301,14 +294,14 @@ export function UserMenuContent() {
             ) : (
               <>
                 <div className="flex-1 flex flex-col min-w-0">
-                  <span className="text-base font-bold text-text-primary dark:text-gray-100">Username</span>
-                  <span className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">@{localName}</span>
+                  <span className="text-base font-bold text-text-primary dark:text-gray-100">Name</span>
+                  <span className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">{displayName}</span>
                 </div>
                 <button
                   type="button"
-                  onClick={handleEditUsername}
+                  onClick={handleEditName}
                   className="p-1.5 rounded-lg text-primary dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-colors flex-shrink-0"
-                  aria-label="Edit username"
+                  aria-label="Edit name"
                 >
                   <SquarePen className="w-5 h-5" aria-hidden="true" />
                 </button>

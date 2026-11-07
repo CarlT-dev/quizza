@@ -16,6 +16,7 @@ interface QuizCardItemProps {
   onDelete: (quizId: string) => void;
   onToggleFavorite: (quizId: string) => void;
   onShare: (quizId: string) => void;
+  onViewResults: (quizId: string) => void;
 }
 
 /**
@@ -37,6 +38,7 @@ export const QuizCardItem = memo(function QuizCardItem({
   onDelete,
   onToggleFavorite,
   onShare,
+  onViewResults,
 }: QuizCardItemProps) {
   const quizId = quiz.id ?? '';
 
@@ -55,6 +57,7 @@ export const QuizCardItem = memo(function QuizCardItem({
       onDelete={() => onDelete(quizId)}
       onToggleFavorite={() => onToggleFavorite(quizId)}
       onShare={() => onShare(quizId)}
+      onViewResults={() => onViewResults(quizId)}
     />
   );
 });

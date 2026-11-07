@@ -1,0 +1,1 @@
+export { useCurrentUserProfile } from './useCurrentUserProfile';

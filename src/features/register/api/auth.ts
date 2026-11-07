@@ -10,6 +10,7 @@ export interface RegisterData {
   email: string;
   password: string;
   username: string;
+  name: string;
 }
 
 export interface RegisterResult {
@@ -43,9 +44,14 @@ async function isUsernameTaken(username: string): Promise<boolean> {
 /**
  * Reserves username in Firestore
  */
-async function reserveUsername(username: string, uid: string, email: string): Promise<void> {
+async function reserveUsername(username: string, uid: string, email: string, name?: string): Promise<void> {
   const usernameRef = doc(db, 'usernames', username.toLowerCase());
-  await setDoc(usernameRef, { uid, email, createdAt: new Date().toISOString() });
+  await setDoc(usernameRef, {
+    uid,
+    email,
+    name: name ?? '',
+    createdAt: new Date().toISOString()
+  });
 }
 
 /**
@@ -59,6 +65,7 @@ async function createUserProfile(
   await setDoc(userRef, {
     email: data.email,
     username: data.username,
+    name: data.name,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });
@@ -95,7 +102,7 @@ export async function registerUser(data: RegisterData): Promise<RegisterResult> 
     });
 
     // Reserve username in Firestore (with email for login lookup)
-    await reserveUsername(data.username, userCredential.user.uid, data.email);
+    await reserveUsername(data.username, userCredential.user.uid, data.email, data.name);
 
     // Create user profile in Firestore
     await createUserProfile(userCredential.user.uid, data);

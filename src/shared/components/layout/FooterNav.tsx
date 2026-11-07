@@ -1,6 +1,6 @@
 import { useLocation } from 'react-router-dom';
 import { Link } from 'react-router-dom';
-import { Home, Search, BookOpen, MessageCircle, BarChart3 } from 'lucide-react';
+import { Home, Search, BookOpen, MessageCircle, User } from 'lucide-react';
 
 interface NavItem {
   path: string;
@@ -13,7 +13,7 @@ const navItems: NavItem[] = [
   { path: '/search', icon: Search, label: 'Search' },
   { path: '/quizzes', icon: BookOpen, label: 'Quizzes' },
   { path: '/messages', icon: MessageCircle, label: 'Messages' },
-  { path: '/status', icon: BarChart3, label: 'Status' },
+  { path: '/profile', icon: User, label: 'Profile' },
 ];
 
 export function FooterNav() {

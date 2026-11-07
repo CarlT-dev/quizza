@@ -12,6 +12,8 @@ interface FormData {
   confirmPassword: string;
   // Part 2
   username: string;
+  // Part 3
+  name: string;
 }
 
 interface FormErrors {
@@ -19,16 +21,18 @@ interface FormErrors {
   password?: string;
   confirmPassword?: string;
   username?: string;
+  name?: string;
 }
 
 export function RegisterPage() {
   const navigate = useNavigate();
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [formData, setFormData] = useState<FormData>({
     email: '',
     password: '',
     confirmPassword: '',
     username: '',
+    name: '',
   });
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -37,13 +41,16 @@ export function RegisterPage() {
   // Refs for focus management
   const emailInputRef = useRef<HTMLInputElement>(null);
   const usernameInputRef = useRef<HTMLInputElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   // Focus first input on step change
   useEffect(() => {
     if (step === 1) {
       emailInputRef.current?.focus();
-    } else {
+    } else if (step === 2) {
       usernameInputRef.current?.focus();
+    } else {
+      nameInputRef.current?.focus();
     }
   }, [step]);
 
@@ -89,6 +96,21 @@ export function RegisterPage() {
     return Object.keys(newErrors).length === 0;
   };
 
+  const validateStep3 = (): boolean => {
+    const newErrors: FormErrors = {};
+
+    if (!formData.name) {
+      newErrors.name = 'Name is required';
+    } else if (formData.name.length < 1) {
+      newErrors.name = 'Name is required';
+    } else if (formData.name.length > 50) {
+      newErrors.name = 'Name must be at most 50 characters';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleInputChange = (field: keyof FormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     if (errors[field]) {
@@ -114,12 +136,24 @@ export function RegisterPage() {
 
     if (!validateStep2()) return;
 
+    // Proceed to step 3
+    setStep(3);
+    setErrors({});
+  };
+
+  const handleStep3Submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setSubmitError(null);
+
+    if (!validateStep3()) return;
+
     setIsSubmitting(true);
 
     const registerData: RegisterData = {
       email: formData.email,
       password: formData.password,
       username: formData.username,
+      name: formData.name,
     };
 
     const result = await registerUser(registerData);
@@ -152,6 +186,12 @@ export function RegisterPage() {
     setSubmitError(null);
   };
 
+  const handleBackToStep2 = () => {
+    setStep(2);
+    setErrors({});
+    setSubmitError(null);
+  };
+
   const handleKeyDown = (e: KeyboardEvent<HTMLFormElement>, onSubmit: () => void) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       const target = e.target as HTMLElement;
@@ -166,14 +206,14 @@ export function RegisterPage() {
   return (
     <div className="relative space-y-6 p-6 pb-20">
       {/* Back button - absolute, before progress indicator */}
-      {step === 2 && (
+      {(step === 2 || step === 3) && (
         <Button
           type="button"
           variant="ghost"
           size="sm"
-          onClick={handleBackToStep1}
+          onClick={step === 2 ? handleBackToStep1 : handleBackToStep2}
           className="absolute top-0 left-0 p-2"
-          aria-label="Back to step 1"
+          aria-label={step === 2 ? 'Back to step 1' : 'Back to step 2'}
           disabled={isSubmitting}
         >
           <ChevronLeft className="w-8 h-8" aria-hidden="true" />
@@ -215,12 +255,34 @@ export function RegisterPage() {
             >
               2
             </span>
-            <span className="sr-only">Step 2: Profile Information</span>
+            <span className="sr-only">Step 2: Username</span>
+          </li>
+          <li className="flex-1 max-w-16 mx-4">
+            <div
+              className={`h-0.5 w-full rounded transition-colors ${
+                step >= 3 ? 'bg-primary-500' : 'bg-gray-200 dark:bg-gray-700'
+              }`}
+              aria-hidden="true"
+            />
+          </li>
+          <li className="flex items-center">
+            <span
+              className={`w-8 h-8 rounded-full flex items-center justify-center font-medium text-sm transition-colors ${
+                step >= 3
+                  ? 'bg-primary-500 text-white'
+                  : 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+              }`}
+              aria-current={step === 3 ? 'step' : undefined}
+            >
+              3
+            </span>
+            <span className="sr-only">Step 3: Name</span>
           </li>
         </ol>
-        <div className="flex justify-center gap-21 text-xs text-gray-500 dark:text-gray-400 mt-2">
+        <div className="flex justify-center gap-14 text-xs text-gray-500 dark:text-gray-400 mt-2">
           <span>Account</span>
-          <span>Profile</span>
+          <span>Username</span>
+          <span>Name</span>
         </div>
       </nav>
 
@@ -351,11 +413,65 @@ export function RegisterPage() {
               isLoading={isSubmitting}
               disabled={isSubmitting}
             >
+              Continue
+            </Button>
+
+          </form>
+
+          <p className="text-center text-sm text-gray-500 dark:text-gray-400">
+            Already have an account?{' '}
+            <button
+              type="button"
+              onClick={() => navigate('/login')}
+              className="text-primary-500 hover:text-primary-600 hover:underline font-medium focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded"
+            >
+              Sign in
+            </button>
+          </p>
+        </>
+      )}
+
+      {/* Step 3: Name */}
+      {step === 3 && (
+        <>
+          <form
+            onSubmit={handleStep3Submit}
+            className="space-y-5"
+            onKeyDown={e => handleKeyDown(e, () => handleStep3Submit(e))}
+            noValidate
+          >
+            <div className="text-center space-y-1 pt-2">
+              <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Create Account</h1>
+              <p className="text-sm text-gray-500 dark:text-gray-400">What should we call you?</p>
+            </div>
+
+            <Input
+              ref={nameInputRef}
+              label="Name"
+              type="text"
+              placeholder="John Doe"
+              value={formData.name}
+              onChange={e => handleInputChange('name', e.target.value)}
+              error={errors.name}
+              required
+              autoComplete="name"
+              icon="user"
+              helperText="1-50 characters"
+              aria-describedby={errors.name ? 'name-error' : 'name-hint'}
+            />
+
+            <Button
+              type="submit"
+              size="lg"
+              className="w-full"
+              isLoading={isSubmitting}
+              disabled={isSubmitting}
+            >
               Confirm
             </Button>
 
           </form>
-          
+
           <p className="text-center text-sm text-gray-500 dark:text-gray-400">
             Already have an account?{' '}
             <button
