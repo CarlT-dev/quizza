@@ -10,6 +10,7 @@ export interface UserProfile {
   email?: string;
   displayName?: string;
   createdAt?: string;
+  bio?: string;           // User bio (max 160 chars)
   /** Denormalized first-attempt stats; written on first completions, read by other users. */
   stats?: UserStats;
 }
@@ -93,4 +94,34 @@ export async function renameUsername(newUsername: string): Promise<RenameUsernam
     console.error('Failed to rename username:', err);
     return { success: false, errorCode: 'rename-failed' };
   }
+}
+
+/**
+ * Updates the user's bio on both users/{uid} and usernames/{username} documents.
+ * This ensures the bio appears in search results (which read from usernames collection).
+ */
+export async function updateBio(userId: string, bio: string): Promise<void> {
+  const trimmedBio = bio.trim().slice(0, 160); // Max 160 characters
+
+  // Get current username to update the usernames collection
+  const profileSnap = await getDoc(doc(db, 'users', userId));
+  const username = (profileSnap.data()?.username as string | undefined)?.toLowerCase() ?? '';
+
+  const batch = writeBatch(db);
+
+  // Update users/{uid}
+  batch.update(doc(db, 'users', userId), {
+    bio: trimmedBio,
+    updatedAt: new Date().toISOString(),
+  });
+
+  // Update usernames/{username} for search results
+  if (username) {
+    batch.update(doc(db, 'usernames', username), {
+      bio: trimmedBio,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  await batch.commit();
 }

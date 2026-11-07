@@ -4,6 +4,7 @@ import { db } from '@/lib/firebase';
 export interface UsernameSearchResult {
   username: string;
   uid: string;
+  bio?: string;
 }
 
 /**
@@ -24,6 +25,10 @@ export async function searchUsernames(prefix: string, maxCount = 10): Promise<Us
   );
   const snap = await getDocs(q);
   return snap.docs
-    .map(d => ({ username: d.id, uid: (d.data().uid as string | undefined) ?? '' }))
+    .map(d => ({
+      username: d.id,
+      uid: (d.data().uid as string | undefined) ?? '',
+      bio: (d.data().bio as string | undefined) ?? undefined
+    }))
     .filter(r => Boolean(r.uid));
 }

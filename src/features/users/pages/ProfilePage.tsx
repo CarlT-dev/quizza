@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, AlertTriangle, UserX, Loader2 } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, UserX, Loader2, Calendar } from 'lucide-react';
 import { useUserProfile } from '../hooks/useUserProfile';
-import { StatTile, Button } from '@/shared/components/ui';
+import { Button } from '@/shared/components/ui';
 import { useAuth } from '@/features/auth';
 import {
   acceptFriendRequest,
@@ -55,7 +55,7 @@ export function ProfilePage() {
   const [failed, setFailed] = useState(false);
 
   /** Accept / decline / cancel / remove — boolean APIs, one shape. */
-  const runFriendAction = async (action: () => Promise<boolean>) => {
+  const runFriendAction = useCallback(async (action: () => Promise<boolean>) => {
     if (isBusy) return;
     setIsBusy(true);
     setFailed(false);
@@ -70,9 +70,9 @@ export function ProfilePage() {
     // inline note.
     refetchFriendships();
     if (!ok) setFailed(true);
-  };
+  }, [isBusy, refetchFriendships]);
 
-  const handleAddFriend = async () => {
+  const handleAddFriend = useCallback(async () => {
     if (!profile || isBusy) return;
     setIsBusy(true);
     setFailed(false);
@@ -92,12 +92,15 @@ export function ProfilePage() {
       setIsBusy(false);
       refetchFriendships();
     }
-  };
+  }, [profile, isBusy, refetchFriendships]);
+
+  const initial = profile?.username?.charAt(0).toUpperCase() ?? '?';
+  const hasBio = profile?.bio && profile.bio.trim().length > 0;
 
   return (
     <div className="flex-1 bg-primary-50/30 dark:bg-gray-900">
       {/* Header with back button — no footer nav on profile pages */}
-      <header className="flex items-center gap-2 px-4 py-3 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+      <header className="flex items-center gap-2 px-4 py-3 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
         <button
           type="button"
           onClick={() => navigate(-1)}
@@ -109,19 +112,22 @@ export function ProfilePage() {
         <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Profile</h1>
       </header>
 
-      <main className="px-4 pb-8">
+      <main className="pb-8">
         {isLoading ? (
-          <div className="max-w-[500px] mx-auto" aria-hidden="true">
+          <div className="max-w-[500px] mx-auto px-4" aria-hidden="true">
+            {/* Gradient avatar skeleton */}
             <div className="flex flex-col items-center py-6">
-              <div className="w-20 h-20 rounded-full bg-gray-200 dark:bg-gray-700 animate-pulse" />
-              <div className="h-5 w-32 rounded bg-gray-200 dark:bg-gray-700 animate-pulse mt-3" />
+              <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary-400/50 to-primary-500/50 animate-pulse" />
+              <div className="h-6 w-40 rounded bg-gray-200 dark:bg-gray-700 animate-pulse mt-3" />
             </div>
+            {/* Stats skeletons */}
             <div className="grid grid-cols-3 gap-3 mb-6">
               <div className="h-20 rounded-xl bg-gray-200 dark:bg-gray-700 animate-pulse" />
               <div className="h-20 rounded-xl bg-gray-200 dark:bg-gray-700 animate-pulse" />
               <div className="h-20 rounded-xl bg-gray-200 dark:bg-gray-700 animate-pulse" />
             </div>
-            <div className="h-24 rounded-2xl bg-gray-200 dark:bg-gray-700 animate-pulse" />
+            {/* Friend action skeleton */}
+            <div className="h-12 rounded-xl bg-gray-200 dark:bg-gray-700 animate-pulse" />
           </div>
         ) : error ? (
           <div className="max-w-[500px] mx-auto flex items-center justify-center py-12">
@@ -148,79 +154,166 @@ export function ProfilePage() {
           </div>
         ) : (
           <div className="max-w-[500px] mx-auto">
-            <div className="flex flex-col items-center py-6">
-              <div className="w-20 h-20 rounded-full bg-primary-500 flex items-center justify-center text-white font-medium text-3xl">
-                {profile.username.charAt(0).toUpperCase()}
-              </div>
-              <h2 className="mt-3 text-lg font-bold text-gray-900 dark:text-gray-100">
-                @{profile.username}
-              </h2>
-              {profile.createdAt && (
-                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                  Member since {formatDate(profile.createdAt)}
-                </p>
-              )}
+            {/* Profile Header with Gradient Background */}
+            <div className="relative overflow-hidden border-b-2 border-gray-300/40 mb-4">
+              {/* Gradient background overlay - transparent base */}
+              <div className="absolute inset-0 bg-gradient-to-b from-primary-100/60 via-primary-50/30 to-white/60 dark:from-primary-900/30 dark:via-primary-900/20 dark:to-primary-900/20" aria-hidden="true" />
 
-              {/* Relationship action — hidden on the user's own profile and
-                  while the friendship data is unavailable */}
-              {!isSelf && uid && friendships && (
-                <div className="mt-4 flex flex-col items-center">
-                  {isBusy ? (
-                    <Loader2 className="w-5 h-5 text-gray-400 animate-spin" aria-hidden="true" />
-                  ) : relation === 'incoming' ? (
-                    <div className="flex items-center gap-2">
-                      <Button size="sm" onClick={() => runFriendAction(() => acceptFriendRequest(uid))}>
-                        Accept
+              <div className="relative flex flex-col items-center px-6 pt-8 pb-0 text-center">
+                {/* Avatar */}
+                <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-bold text-4xl shadow-lg shadow-primary-500/30">
+                  {initial}
+                </div>
+
+                {/* Username & Display Name */}
+                <div className="mt-4">
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                    @{profile.username}
+                  </h2>
+                  {profile.displayName && profile.displayName !== profile.username && (
+                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{profile.displayName}</p>
+                  )}
+                </div>
+
+                {/* Bio - centered, static display */}
+                <div className="w-full max-w-xl px-4">
+                  <div className="w-full">
+                    {hasBio ? (
+                      <p
+                        className="text-sm text-gray-400 dark:text-gray-300 leading-relaxed whitespace-pre-wrap text-center"
+                      >
+                        {profile.bio}
+                      </p>
+                    ) : (
+                      <p className="w-full text-center text-base text-gray-400 dark:text-gray-500 py-4">
+                        No bio yet
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Member since */}
+                {profile.createdAt && (
+                  <p className="mt-1 flex items-center justify-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    <Calendar className="w-3 h-3 shrink-0" aria-hidden="true" />
+                    Member since {formatDate(profile.createdAt)}
+                  </p>
+                )}
+
+                {/* Stats - inline with transparent background */}
+                <div className="w-full max-w-xl px-4 mt-4">
+                  <div className="flex justify-center">
+                    <div className="flex bg-white/30 dark:bg-gray-800/30 backdrop-blur-sm border border-white/50 dark:border-gray-700/50 overflow-hidden">
+                      <StatItem
+                        value={profile.stats?.iq ?? '—'}
+                        label="IQ"
+                        isFirst
+                        hasDivider
+                      />
+                      <StatItem
+                        value={profile.stats?.avgAccuracy !== undefined ? `${profile.stats.avgAccuracy}%` : '—'}
+                        label="Avg Accuracy"
+                        hasDivider
+                      />
+                      <StatItem
+                        value={profile.stats?.quizzesTaken ?? '—'}
+                        label="Quizzes Taken"
+                        isLast
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Friend Actions */}
+                {!isSelf && uid && friendships && (
+                  <div className="mt-4 flex flex-col items-center w-full max-w-xl px-4">
+                    {isBusy ? (
+                      <Loader2 className="w-5 h-5 text-gray-400 animate-spin" aria-hidden="true" />
+                    ) : relation === 'incoming' ? (
+                      <div className="flex items-center gap-2 w-full">
+                        <Button
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => runFriendAction(() => acceptFriendRequest(uid!))}
+                        >
+                          Accept
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="flex-1"
+                          onClick={() => runFriendAction(() => declineFriendRequest(uid!))}
+                        >
+                          Decline
+                        </Button>
+                      </div>
+                    ) : relation === 'friends' ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-red-600 dark:text-red-400 w-full"
+                        onClick={() => runFriendAction(() => removeFriend(uid!))}
+                      >
+                        Remove Friend
                       </Button>
+                    ) : relation === 'requested' ? (
                       <Button
                         size="sm"
                         variant="secondary"
-                        onClick={() => runFriendAction(() => declineFriendRequest(uid))}
+                        className="w-full"
+                        onClick={() => runFriendAction(() => cancelFriendRequest(uid!))}
                       >
-                        Decline
+                        Cancel request
                       </Button>
-                    </div>
-                  ) : relation === 'friends' ? (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-red-600 dark:text-red-400"
-                      onClick={() => runFriendAction(() => removeFriend(uid))}
-                    >
-                      Remove Friend
-                    </Button>
-                  ) : relation === 'requested' ? (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => runFriendAction(() => cancelFriendRequest(uid))}
-                    >
-                      Cancel request
-                    </Button>
-                  ) : (
-                    <Button size="sm" onClick={handleAddFriend}>
-                      Add Friend
-                    </Button>
-                  )}
-                  {failed && (
-                    <p className="mt-2 text-xs text-red-600 dark:text-red-400" role="alert">
-                      Something went wrong — try again.
-                    </p>
-                  )}
-                </div>
-              )}
+                    ) : (
+                      <Button size="sm" className="w-full" onClick={handleAddFriend}>
+                        Add Friend
+                      </Button>
+                    )}
+                    {failed && (
+                      <p className="mt-2 text-xs text-red-600 dark:text-red-400 text-center" role="alert">
+                        Something went wrong — try again.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* First-attempt stats ('—' for legacy users until their next first
-                completion writes the denormalized stats copy) */}
-            <div className="grid grid-cols-3 gap-3 mb-6">
-              <StatTile value={profile.stats ? profile.stats.iq : '—'} label="IQ" />
-              <StatTile value={profile.stats ? `${profile.stats.avgAccuracy}%` : '—'} label="Avg accuracy" tone="green" />
-              <StatTile value={profile.stats ? profile.stats.quizzesTaken : '—'} label="Quizzes taken" />
-            </div>
+            {/* Spacer at bottom */}
+            <div className="group w-full flex items-center gap-4 p-4"></div>
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+interface StatItemProps {
+  value: string | number;
+  label: string;
+  isFirst?: boolean;
+  isLast?: boolean;
+  hasDivider?: boolean;
+}
+
+function StatItem({ value, label, isFirst, isLast, hasDivider }: StatItemProps) {
+  return (
+    <div
+      className={`flex-1 flex flex-col items-center py-4 px-6 relative ${isFirst ? 'rounded-l-2xl' : ''} ${isLast ? 'rounded-r-2xl' : ''}`}
+    >
+      <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+        {value}
+      </div>
+      <div className="mt-1 text-xs text-center text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+        {label}
+      </div>
+      {hasDivider && (
+        <div
+          className="absolute right-0 top-3 bottom-3 w-px bg-gray-300/50 dark:bg-gray-600/50"
+          aria-hidden="true"
+        />
+      )}
     </div>
   );
 }
