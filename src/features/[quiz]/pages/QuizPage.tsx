@@ -14,6 +14,46 @@ function mapQuizDocToQuiz(quizDoc: QuizDocument) {
   };
 }
 
+/** A user answer: option index (multiple_choice/true_false), text (identification), or items (enumeration). */
+type AnswerValue = number | string | string[];
+
+/** Whether an answer counts as answered — the same rule the progress counter has always used. */
+function isAnsweredValue(value: AnswerValue): boolean {
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (Array.isArray(value)) return value.some(item => typeof item === 'string' && item.trim().length > 0);
+  return value !== undefined;
+}
+
+/**
+ * Makes an answer safe to persist and to read back:
+ * - Firestore rejects sparse arrays (holes serialize as `undefined`), so array
+ *   answers are densified — gaps become ''. An index loop is required here:
+ *   Array.prototype.map preserves holes.
+ * - Returns null for values that cannot be persisted (callers drop them).
+ */
+function sanitizeAnswerValue(value: AnswerValue): AnswerValue | null {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number') return value;
+  if (Array.isArray(value)) {
+    const dense: string[] = [];
+    for (let i = 0; i < value.length; i++) {
+      dense.push(typeof value[i] === 'string' ? value[i] : '');
+    }
+    return dense;
+  }
+  return null;
+}
+
+/** Converts the in-memory answer map into the Firestore-friendly record shape. */
+function serializeAnswers(map: Map<string, AnswerValue>): Record<string, AnswerValue> {
+  const serialized: Record<string, AnswerValue> = {};
+  map.forEach((value, questionId) => {
+    const sanitized = sanitizeAnswerValue(value);
+    if (sanitized !== null) serialized[questionId] = sanitized;
+  });
+  return serialized;
+}
+
 export function QuizPage() {
   const { quiz: quizId } = useParams<{ quiz: string }>();
   const navigate = useNavigate();
@@ -24,7 +64,7 @@ export function QuizPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // Saved progress from Firestore — used to display correct progress on the
-  // start page and to let the user resume where they left off.
+  // start page and to restore the user's answers when they resume.
   const [savedProgress, setSavedProgress] = useState<QuizProgress | null>(null);
 
   // Fetch quiz from Firestore
@@ -71,19 +111,61 @@ export function QuizPage() {
   // State persisted across both views
   const [view, setView] = useState<'start' | 'quiz'>('start');
   const [currentIndex, setCurrentIndex] = useState(0);
-  // Track whether we've initialized currentIndex from saved progress (runs once).
+  // Track whether we've initialized from saved progress (runs once per mount).
+  // handleRetake resets state explicitly and must not re-trigger this effect.
   const initRef = useRef(false);
+  // Set once the quiz view is entered (Start or Retake). The init effect only
+  // restores while this is still false, so a mid-quiz autosave refetch can
+  // never hijack live answers or the current position.
+  const startedRef = useRef(false);
   // Answer can be: number (multiple_choice/true_false), string (identification), string[] (enumeration)
-  const [answers, setAnswers] = useState<Map<string, number | string | string[]>>(new Map());
+  const [answers, setAnswers] = useState<Map<string, AnswerValue>>(new Map());
 
-  // Initialize currentIndex from saved progress so the user can resume where
-  // they left off. Runs once when savedProgress first becomes available.
+  // Initialize from saved progress ONCE per mount: restore the saved answers
+  // (not just the position) so resuming after a refresh keeps every answer,
+  // then land on the first unanswered question.
   useEffect(() => {
-    if (!initRef.current && savedProgress && savedProgress.answeredCount > 0) {
-      setCurrentIndex(savedProgress.answeredCount);
-      initRef.current = true;
+    if (initRef.current) return;
+    if (!quizData || quizData.questions.length === 0) return;
+    if (!savedProgress) return;
+    // Only restore before the quiz view is ever entered. On a FRESH attempt
+    // (no doc at mount) the first autosave refetch delivers savedProgress
+    // mid-quiz; restoring then would overwrite live answers and snap the
+    // position. Reading the ref (not view state) keeps this effect free of
+    // stale-closure and exhaustive-deps concerns.
+    if (startedRef.current) return;
+    initRef.current = true;
+
+    // Completed attempts stay on the start page (Retake); nothing to resume.
+    if (savedProgress.completed) return;
+
+    const savedAnswers = savedProgress.answers;
+    // Attempts saved before answers were persisted carry only the count —
+    // restart from question 1 instead of resuming with empty answers.
+    if (!savedAnswers || Object.keys(savedAnswers).length === 0) {
+      setCurrentIndex(0);
+      return;
     }
-  }, [savedProgress]);
+
+    // Drop answers for questions that no longer exist (quiz edited between
+    // sessions) and densify arrays — a null in a restored array would crash
+    // the answered-count derivation below.
+    const validQuestionIds = new Set(quizData.questions.map(q => q.id));
+    const restored = new Map<string, AnswerValue>();
+    for (const [questionId, value] of Object.entries(savedAnswers)) {
+      if (!validQuestionIds.has(questionId)) continue;
+      const sanitized = sanitizeAnswerValue(value);
+      if (sanitized !== null) restored.set(questionId, sanitized);
+    }
+    if (restored.size > 0) {
+      setAnswers(restored);
+    }
+
+    // Resume at the first unanswered question, clamped to the last question so
+    // a fully-answered attempt lands on Submit instead of an out-of-bounds index.
+    const restoredCount = Array.from(restored.values()).filter(isAnsweredValue).length;
+    setCurrentIndex(Math.min(restoredCount, quizData.questions.length - 1));
+  }, [savedProgress, quizData]);
 
   // VIEW 1 derived constants (with null checks for start page)
   const totalQuestions = quizData?.questions.length ?? 0;
@@ -95,25 +177,29 @@ export function QuizPage() {
   const hasAnswer = answers.has(quizData?.questions[currentIndex]?.id || '');
 
   // Count answered questions (for progress)
-  const answeredCount = Array.from(answers.values()).filter(v => {
-    if (typeof v === 'string') return v.trim().length > 0;
-    if (Array.isArray(v)) return v.some(item => item.trim().length > 0);
-    return v !== undefined;
-  }).length;
+  const answeredCount = Array.from(answers.values()).filter(isAnsweredValue).length;
 
-  // Persist progress so the quizzes list can show the strip and completed dot.
-  // Debounced: answeredCount only changes when a question goes unanswered -> answered,
-  // so identification/enumeration keystrokes do not retrigger the write.
-  // Gap (accepted): no flush-on-unmount, so leaving within 800ms of an answer
-  // loses that delta until the next write or submit.
+  // Persist progress AND the answer values, so the quizzes list shows the
+  // strip and a refresh mid-quiz can restore every answer on resume.
+  // Debounced: the effect re-arms on every answers change (including
+  // identification/enumeration keystrokes) and writes once 800ms after the
+  // last change — one write per typing pause, with the final values.
+  // Gap (accepted): no flush-on-unmount, so a hard refresh within 800ms of an
+  // answer loses that answer until the next write or submit (submit always
+  // sends the full in-memory map).
   useEffect(() => {
     if (view !== 'quiz' || !quizData || !user || !quizId || answeredCount === 0) return;
     const timer = setTimeout(async () => {
-      await saveQuizProgress(quizId, user.uid, {
-        answeredCount,
-        totalQuestions,
-        completed: false,
-      });
+      try {
+        await saveQuizProgress(quizId, user.uid, {
+          answeredCount,
+          totalQuestions,
+          completed: false,
+          answers: serializeAnswers(answers),
+        });
+      } catch (err) {
+        console.error('Failed to save quiz progress:', err);
+      }
       try {
         const progress = await getQuizProgress(quizId, user.uid);
         setSavedProgress(progress ?? null);
@@ -122,7 +208,7 @@ export function QuizPage() {
       }
     }, 800);
     return () => clearTimeout(timer);
-  }, [view, quizData, user, answeredCount, totalQuestions, quizId]);
+  }, [view, quizData, user, answers, answeredCount, totalQuestions, quizId]);
 
   const handleSelectAnswer = (questionId: string, optionIndex: number) => {
     setAnswers(prev => new Map(prev).set(questionId, optionIndex));
@@ -145,11 +231,10 @@ export function QuizPage() {
 
   const handleNext = () => {
     if (isLastQuestion) {
-      // Submit quiz - navigate to score page with answers
-      const answersObj: Record<string, number | string | string[]> = {};
-      answers.forEach((value, key) => {
-        answersObj[key] = value;
-      });
+      // Submit quiz - navigate to the score page with ALL answers (restored +
+      // current). serializeAnswers densifies gapped enumeration arrays, which
+      // Firestore would otherwise reject when the completion save runs.
+      const answersObj = serializeAnswers(answers);
       navigate(`/quiz/${quizId}/score`, { state: { answers: answersObj } });
     } else {
       setCurrentIndex(prev => prev + 1);
@@ -163,14 +248,28 @@ export function QuizPage() {
   };
 
   const handleStartQuiz = () => {
+    startedRef.current = true;
     setView('quiz');
   };
 
   const handleRetake = () => {
+    startedRef.current = true;
     setAnswers(new Map());
     setCurrentIndex(0);
     setView('quiz');
-    initRef.current = false;
+    // Reset the saved attempt so a refresh mid-retake cannot resurrect the old
+    // answers. This merge write itself keeps score/firstScore/details intact;
+    // initRef is intentionally NOT reset: the init effect runs once per mount,
+    // and re-running it when the autosave refetch updates savedProgress would
+    // teleport the user back mid-retake.
+    if (user && quizId && quizData) {
+      saveQuizProgress(quizId, user.uid, {
+        answeredCount: 0,
+        totalQuestions,
+        completed: false,
+        answers: {},
+      }).catch(err => console.error('Failed to reset attempt on retake:', err));
+    }
   };
 
   const handleBackToStart = async () => {
@@ -182,6 +281,7 @@ export function QuizPage() {
           answeredCount,
           totalQuestions,
           completed: false,
+          answers: serializeAnswers(answers),
         });
       } catch (err) {
         console.error('Failed to save progress before returning to start:', err);
