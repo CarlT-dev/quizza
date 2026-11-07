@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Play, Users, BookOpen, ChevronRight } from 'lucide-react';
+import { Play, BookOpen, ChevronRight } from 'lucide-react';
 import type { QuizDocument } from '@/features/quiz';
 
 interface CreatedQuizzesProps {
