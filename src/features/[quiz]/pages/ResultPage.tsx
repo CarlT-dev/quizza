@@ -1,24 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { AlertTriangle, Check, ChevronLeft, Home, RotateCcw, X } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, Home, RotateCcw } from 'lucide-react';
 import { Button } from '@/shared/components/ui';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { getQuizById, getQuizProgress } from '@/features/quiz';
 import type { QuizDocument, QuizProgress } from '@/features/quiz/api/quiz';
 import type { QuizQuestion } from '@/features/genai/schema';
-import { checkEnumerationAnswer, checkIdentificationAnswer } from '@/features/genai/schema/quiz-response';
-
-// Answer value stored per question id (mirrors QuizPage's answer map values)
-type AnswerValue = number | string | string[];
-
-// One graded question, forwarded by ScorePage's calculateScore() via location.state
-interface ScoreDetail {
-  questionId: string;
-  isCorrect: boolean;
-  userAnswer: AnswerValue;
-  correctAnswer: AnswerValue;
-  explanation: string;
-}
+import { computeIsCorrect, getCorrectAnswer, type AnswerValue, type ScoreDetail } from '../utils/answerReview';
+import { QuestionReviewCard } from '../components/QuestionReviewCard';
 
 interface ResultLocationState {
   answers?: Record<string, AnswerValue>; // forwarded by ScorePage; unused here
@@ -41,66 +30,6 @@ function mapQuizDocToQuiz(quizDoc: QuizDocument) {
     questions: quizDoc.questions,
   };
 }
-
-const TYPE_LABELS: Record<QuizQuestion['type'], string> = {
-  multiple_choice: 'Multiple choice',
-  true_false: 'True / False',
-  identification: 'Identification',
-  enumeration: 'Enumeration',
-};
-
-/**
- * Reconstructs the correct answer value for a question, mirroring ScorePage's
- * calculateScore() so that review items can be rebuilt when persisted details
- * are unavailable (e.g. attempts saved before details were included).
- */
-function getCorrectAnswer(question: QuizQuestion): AnswerValue {
-  switch (question.type) {
-    case 'multiple_choice':
-    case 'true_false':
-      return question.correctAnswerIndex ?? -1;
-    case 'identification':
-      return question.correctAnswer || '';
-    case 'enumeration':
-      return question.correctAnswers || [];
-    default:
-      return '';
-  }
-}
-
-/**
- * Determines whether a user's answer is correct for a given question, mirroring
- * ScorePage's calculateScore() logic.
- */
-function computeIsCorrect(question: QuizQuestion, userAnswer: AnswerValue | undefined): boolean {
-  if (userAnswer === undefined) return false;
-
-  switch (question.type) {
-    case 'multiple_choice':
-    case 'true_false': {
-      const correctIndex = question.correctAnswerIndex ?? -1;
-      return typeof userAnswer === 'number' && userAnswer === correctIndex;
-    }
-    case 'identification': {
-      if (typeof userAnswer !== 'string' || userAnswer.trim().length === 0) return false;
-      return checkIdentificationAnswer(userAnswer, question.correctAnswer || '', question.acceptableAnswers);
-    }
-    case 'enumeration': {
-      if (!Array.isArray(userAnswer) || userAnswer.some(a => typeof a !== 'string' || a.trim().length === 0)) return false;
-      const result = checkEnumerationAnswer(userAnswer, question.correctAnswers || [], question.minCorrect, question.enumerationOrdered ?? false);
-      return result.passed;
-    }
-    default:
-      return false;
-  }
-}
-
-// Shared green/red families (same palette ScorePage uses for pass/fail)
-const GREEN_ROW = 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20';
-const RED_ROW = 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20';
-const PLAIN_ROW = 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800';
-const GREEN_ICON = 'text-green-600 dark:text-green-400';
-const RED_ICON = 'text-red-600 dark:text-red-400';
 
 export function ResultPage() {
   const { quiz: quizId } = useParams<{ quiz: string }>();
@@ -399,222 +328,12 @@ export function ResultPage() {
                     if (!question) return null;
 
                     return (
-                      <div
+                      <QuestionReviewCard
                         key={`${index}-${detail.questionId}`}
-                        className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 space-y-4"
-                      >
-                        {/* Question header */}
-                        <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-primary-600 dark:text-primary-400">
-                              Question {index + 1}
-                            </span>
-                            <span className="px-2 py-0.5 text-xs font-medium rounded-lg bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300">
-                              {TYPE_LABELS[question.type]}
-                            </span>
-                          </div>
-                          <span className={`inline-flex items-center gap-1 text-xs font-semibold ${detail.isCorrect ? GREEN_ICON : RED_ICON}`}>
-                            {detail.isCorrect ? (
-                              <Check className="w-4 h-4" aria-hidden="true" />
-                            ) : (
-                              <X className="w-4 h-4" aria-hidden="true" />
-                            )}
-                            {detail.isCorrect ? 'Correct' : 'Incorrect'}
-                          </span>
-                        </div>
-
-                        {/* Question text */}
-                        <p className="text-base font-medium text-gray-900 dark:text-gray-100 leading-relaxed">
-                          {question.question}
-                        </p>
-
-                        {/* Answer body per question type */}
-                        {(() => {
-                          switch (question.type) {
-                            case 'multiple_choice':
-                            case 'true_false': {
-                              // Unanswered MC/TF arrives as '' (not undefined) from calculateScore
-                              const userIndex = typeof detail.userAnswer === 'number' ? detail.userAnswer : null;
-                              const correctIndex = typeof detail.correctAnswer === 'number' && detail.correctAnswer >= 0
-                                ? detail.correctAnswer
-                                : null;
-                              const showLetters = question.type === 'multiple_choice';
-
-                              if (correctIndex === null) {
-                                return (
-                                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                                    Answer key unavailable for this question.
-                                  </p>
-                                );
-                              }
-
-                              return (
-                                <>
-                                  <ul className="space-y-2">
-                                    {question.options.map((option, optionIndex) => {
-                                      const isCorrectRow = optionIndex === correctIndex;
-                                      const isUserRow = optionIndex === userIndex;
-                                      const rowClass = isCorrectRow ? GREEN_ROW : isUserRow ? RED_ROW : PLAIN_ROW;
-                                      const iconClass = isCorrectRow ? GREEN_ICON : RED_ICON;
-
-                                      return (
-                                        <li key={optionIndex} className={`flex items-center gap-3 p-3 rounded-xl border-2 ${rowClass}`}>
-                                          {showLetters && optionIndex < 26 && (
-                                            <span className={`text-xs font-bold shrink-0 ${isCorrectRow || isUserRow ? iconClass : 'text-gray-400 dark:text-gray-500'}`}>
-                                              {String.fromCharCode(65 + optionIndex)}
-                                            </span>
-                                          )}
-                                          <span className="flex-1 text-sm text-gray-900 dark:text-gray-100">{option}</span>
-                                          {isUserRow && (
-                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-primary-500 text-white shrink-0">
-                                              Yours
-                                            </span>
-                                          )}
-                                          {isCorrectRow ? (
-                                            <Check className={`w-5 h-5 shrink-0 ${iconClass}`} aria-hidden="true" />
-                                          ) : isUserRow ? (
-                                            <X className={`w-5 h-5 shrink-0 ${iconClass}`} aria-hidden="true" />
-                                          ) : null}
-                                        </li>
-                                      );
-                                    })}
-                                  </ul>
-                                  {userIndex === null && (
-                                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                                      You did not answer this question.
-                                    </p>
-                                  )}
-                                </>
-                              );
-                            }
-
-                            case 'identification': {
-                              const userText = typeof detail.userAnswer === 'string' ? detail.userAnswer : '';
-                              const isBlank = userText.trim().length === 0;
-                              const correctText = typeof detail.correctAnswer === 'string' ? detail.correctAnswer : '';
-                              const alternatives = (question.acceptableAnswers ?? [])
-                                .filter(ans => ans.trim().toLowerCase() !== correctText.trim().toLowerCase());
-
-                              return (
-                                <div className="space-y-2">
-                                  <div className={`p-3 rounded-xl border ${isBlank ? PLAIN_ROW : detail.isCorrect ? GREEN_ROW : RED_ROW}`}>
-                                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Your answer</p>
-                                    <p className={`text-sm ${isBlank ? 'text-gray-400 dark:text-gray-500 italic' : 'font-medium text-gray-900 dark:text-gray-100'}`}>
-                                      {isBlank ? 'Not answered' : userText}
-                                    </p>
-                                  </div>
-                                  <div className={`p-3 rounded-xl border ${GREEN_ROW}`}>
-                                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Correct answer</p>
-                                    <p className="text-sm font-medium text-green-700 dark:text-green-300">{correctText}</p>
-                                  </div>
-                                  {alternatives.length > 0 && (
-                                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                                      Also accepted: {alternatives.join(', ')}
-                                    </p>
-                                  )}
-                                </div>
-                              );
-                            }
-
-                            case 'enumeration': {
-                              // userAnswer is '' (not an array) when the whole question was skipped,
-                              // and can contain holes when only some items were filled in
-                              const items = Array.isArray(detail.userAnswer) ? detail.userAnswer : [];
-                              const keyList = question.correctAnswers ?? (Array.isArray(detail.correctAnswer) ? detail.correctAnswer : []);
-                              const result = keyList.length > 0 ? checkEnumerationAnswer(items, keyList, question.minCorrect, question.enumerationOrdered ?? false) : null;
-
-                              return (
-                                <div className="space-y-2">
-                                  <ul className="space-y-2">
-                                    {keyList.map((correctItem, itemIndex) => {
-                                      const normalizedCorrect = correctItem.trim().toLowerCase();
-                                      const isOrdered = question.enumerationOrdered === true;
-
-                                      if (isOrdered) {
-                                        // Positional display — user's answer at this position vs correct answer at this position
-                                        const userItem = typeof items[itemIndex] === 'string' ? items[itemIndex] : '';
-                                        const isBlank = userItem.trim().length === 0;
-                                        const isMatch = !isBlank && userItem.trim().toLowerCase() === normalizedCorrect;
-
-                                        return (
-                                          <li key={itemIndex} className={`p-3 rounded-xl border ${isMatch ? GREEN_ROW : isBlank ? PLAIN_ROW : RED_ROW}`}>
-                                            <div className="flex items-center justify-between gap-2">
-                                              <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">
-                                                Item {itemIndex + 1}
-                                              </span>
-                                              {isMatch ? (
-                                                <Check className={`w-4 h-4 shrink-0 ${GREEN_ICON}`} aria-hidden="true" />
-                                              ) : (
-                                                <X className={`w-4 h-4 shrink-0 ${isBlank ? 'text-gray-400 dark:text-gray-500' : RED_ICON}`} aria-hidden="true" />
-                                              )}
-                                            </div>
-                                            <p className={`text-sm ${isBlank ? 'text-gray-400 dark:text-gray-500 italic' : 'font-medium text-gray-900 dark:text-gray-100'}`}>
-                                              {isBlank ? 'Not answered' : userItem}
-                                            </p>
-                                            {!isMatch && !isBlank && (
-                                              <p className="mt-1 text-xs text-green-700 dark:text-green-300">
-                                                Correct: {correctItem}
-                                              </p>
-                                            )}
-                                          </li>
-                                        );
-                                      }
-
-                                      // Unordered display — set-based membership, position doesn't matter
-                                      const userSet = new Set(items.map(a => a.trim().toLowerCase()).filter(a => a.length > 0));
-                                      const isMatch = userSet.has(normalizedCorrect);
-
-                                      return (
-                                        <li key={itemIndex} className={`p-3 rounded-xl border ${isMatch ? GREEN_ROW : RED_ROW}`}>
-                                          <div className="flex items-center justify-between gap-2">
-                                            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">
-                                              Item {itemIndex + 1}
-                                            </span>
-                                            {isMatch ? (
-                                              <Check className={`w-4 h-4 shrink-0 ${GREEN_ICON}`} aria-hidden="true" />
-                                            ) : (
-                                              <X className={`w-4 h-4 shrink-0 ${RED_ICON}`} aria-hidden="true" />
-                                            )}
-                                          </div>
-                                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                            {correctItem}
-                                          </p>
-                                          {!isMatch && (
-                                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                              Not included in your answers
-                                            </p>
-                                          )}
-                                        </li>
-                                      );
-                                    })}
-                                  </ul>
-                                  {result && (
-                                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                                      Matched {result.correct} of {result.total} items
-                                      {question.minCorrect != null && question.minCorrect < result.total
-                                        ? ` (needs ${question.minCorrect} to pass)`
-                                        : ''}.
-                                    </p>
-                                  )}
-                                </div>
-                              );
-                            }
-
-                            default:
-                              return null;
-                          }
-                        })()}
-
-                        {/* Explanation */}
-                        {detail.explanation.trim().length > 0 && (
-                          <div className="p-4 bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-xl">
-                            <p className="text-xs font-semibold text-primary-700 dark:text-primary-300 mb-1">Explanation</p>
-                            <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-                              {detail.explanation}
-                            </p>
-                          </div>
-                        )}
-                      </div>
+                        detail={detail}
+                        question={question}
+                        index={index}
+                      />
                     );
                   })}
                 </div>

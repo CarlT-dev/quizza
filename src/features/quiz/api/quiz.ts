@@ -293,6 +293,28 @@ export async function getUserAttempts(
 }
 
 /**
+ * All attempt docs for one quiz — the owner's results view. One doc exists per
+ * taker (retakes overwrite), so this is at most one row per participant.
+ * Readable only by the quiz owner (quizAttempts read rule's quiz-owner branch)
+ * or the taker themself; everyone else is denied by rules, not filtered.
+ * Single-field where() + client-side sort — no composite indexes needed.
+ */
+export async function getQuizAttempts(
+  quizId: string,
+  maxCount = 200
+): Promise<Array<QuizProgress & { userId: string; quizId: string }>> {
+  const q = query(
+    collection(db, 'quizAttempts'),
+    where('quizId', '==', quizId),
+    limit(maxCount)
+  );
+  const querySnapshot = await getDocs(q);
+  return querySnapshot.docs.map(docSnap =>
+    docSnap.data() as QuizProgress & { userId: string; quizId: string }
+  );
+}
+
+/**
  * Fetches quizzes by id in batched-10 'in' queries. Docs that are missing or
  * unreadable (e.g. made private by their owner after being saved) are
  * silently omitted — callers drop rows whose quiz is absent. Result order is

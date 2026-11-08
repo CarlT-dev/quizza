@@ -134,11 +134,23 @@ export function SearchPage() {
                       className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                     >
                       <span className="w-11 h-11 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-600 dark:text-primary-400 font-medium text-lg flex-shrink-0">
-                        {person.username.charAt(0).toUpperCase()}
+                        {(person.name ?? person.username).charAt(0).toUpperCase()}
                       </span>
-                      <span className="flex-1 min-w-0 font-bold text-sm text-gray-900 dark:text-gray-100 truncate">
-                        @{person.username}
-                      </span>
+                      <div className="flex-1 min-w-0">
+                        <span className="flex-1 min-w-0 font-bold text-sm text-gray-900 dark:text-gray-100 truncate block">
+                          {person.name ?? person.username}
+                        </span>
+                        {person.name && (
+                          <span className="text-xs text-gray-500 dark:text-gray-400 truncate block mt-0.5">
+                            @{person.username}
+                          </span>
+                        )}
+                        {person.bio && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                            {person.bio}
+                          </p>
+                        )}
+                      </div>
                       <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" aria-hidden="true" />
                     </button>
                   ))}

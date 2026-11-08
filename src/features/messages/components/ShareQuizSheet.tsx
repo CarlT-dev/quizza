@@ -87,7 +87,7 @@ function ShareSheetContent({ quiz, onDone }: { quiz: QuizDocument; onDone: () =>
         uids.map(async uid => {
           try {
             const profile = await getUserProfile(uid);
-            return [uid, profile?.username ?? uid.slice(0, 8)] as const;
+            return [uid, profile?.name ?? profile?.username ?? uid.slice(0, 8)] as const;
           } catch (err) {
             console.error('Failed to load profile:', err);
             return [uid, uid.slice(0, 8)] as const;
@@ -218,11 +218,12 @@ function ShareSheetContent({ quiz, onDone }: { quiz: QuizDocument; onDone: () =>
     return (
       <div className="flex gap-3 overflow-x-auto snap-x pb-1">
         {visibleFriends.map(uid => {
-          const name = names[uid] ?? uid.slice(0, 8);
           const isSelected = selected.has(uid);
           const outcome = outcomes[uid];
           const isSent = outcome === 'sent';
           const isFailed = outcome === 'failed';
+          const profileName = names[uid] ?? uid.slice(0, 8);
+
           return (
             <button
               key={uid}
@@ -230,7 +231,7 @@ function ShareSheetContent({ quiz, onDone }: { quiz: QuizDocument; onDone: () =>
               onClick={() => toggleFriend(uid)}
               disabled={isSent || isSharing}
               aria-pressed={isSelected}
-              aria-label={`Share with @${name}`}
+              aria-label={`Share with ${profileName}`}
               className="w-16 flex flex-col items-center gap-1.5 shrink-0 snap-start rounded-xl p-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-default"
             >
               <span
@@ -244,7 +245,7 @@ function ShareSheetContent({ quiz, onDone }: { quiz: QuizDocument; onDone: () =>
                     : ''
                 }`}
               >
-                {name.charAt(0).toUpperCase()}
+                {profileName.charAt(0).toUpperCase()}
                 {(isSelected || isSent) && !isFailed && (
                   <span
                     className={`absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full border-2 border-white dark:border-gray-800 flex items-center justify-center ${
@@ -264,7 +265,7 @@ function ShareSheetContent({ quiz, onDone }: { quiz: QuizDocument; onDone: () =>
                       : 'text-gray-700 dark:text-gray-300'
                 }`}
               >
-                @{name}
+                {profileName}
               </span>
             </button>
           );
