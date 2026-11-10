@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Edit2, Calendar } from 'lucide-react';
+import { Edit2, ArrowLeft, Calendar } from 'lucide-react';
 import { Button } from '@/shared/components/ui';
 import { formatDate } from '../pages/ProfilePage';
 
@@ -14,6 +14,10 @@ interface ProfileHeaderProps {
   quizzesCreated: number;
   quizzesTaken: number;
   bestAccuracy?: number;
+  /** Optional back button callback — when provided, a back button is shown in the header overlay */
+  onBack?: () => void;
+  /** Optional title shown in the header overlay */
+  title?: string;
 }
 
 const MAX_BIO_LENGTH = 160;
@@ -28,7 +32,9 @@ export function ProfileHeader({
   isUpdating,
   quizzesCreated,
   quizzesTaken,
-  bestAccuracy
+  bestAccuracy,
+  onBack,
+  title
 }: ProfileHeaderProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editBio, setEditBio] = useState(bio ?? '');
@@ -71,13 +77,28 @@ export function ProfileHeader({
   }, [isEditing, handleSave]);
 
   const initial = username.charAt(0).toUpperCase();
+  //  dark:from-primary-900/30 dark:via-primary-900/20 dark:to-primary-900/20
 
   return (
-    <div className="relative overflow-hidden border-b-2 border-gray-300/40 mb-4">
+    <div className="relative overflow-hidden border-b-2 border-gray-300/40 dark:border-none mb-4">
       {/* Gradient background overlay - transparent base */}
-      <div className="absolute inset-0 bg-gradient-to-b from-primary-100/60 via-primary-50/30 to-white/60 dark:from-primary-900/30 dark:via-primary-900/20 dark:to-primary-900/20" aria-hidden="true" />
+      <div className="absolute inset-0 bg-gradient-to-b from-primary-100/60 via-primary-50/30 to-white/60 dark:from-primary-100/60 dark:via-primary-300/20 dark:to-primary-900/20" aria-hidden="true" />
 
-      <div className="relative flex flex-col items-center px-6 pt-8 pb-0 text-center">
+      {/* Header overlay: back button + title positioned over the gradient background */}
+      {onBack && (
+        <div className="absolute top-0 left-0 right-0 px-4 py-3 flex items-center justify-between z-10">
+          <button
+            type="button"
+            onClick={onBack}
+            className="p-1.5 rounded-lg dark:text-white"
+            aria-label="Go back"
+          >
+            <ArrowLeft className="w-5 h-5" aria-hidden="true" />
+          </button>
+        </div>
+      )}
+
+      <div className="relative flex flex-col items-center px-6 pt-16 pb-0 text-center">
         {/* Avatar */}
         <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-bold text-4xl shadow-lg shadow-primary-500/30">
           {initial}
@@ -185,7 +206,7 @@ export function ProfileHeader({
       {/* Stats - inline with transparent background */}
         <div className="w-full max-w-xl px-4">
           <div className="flex justify-center">
-            <div className="flex bg-white/30 dark:bg-gray-800/30 backdrop-blur-sm border border-white/50 dark:border-gray-700/50 overflow-hidden">
+            <div className="flex backdrop-blur-sm overflow-hidden">
               <StatItem
                 value={quizzesCreated}
                 label="Created"

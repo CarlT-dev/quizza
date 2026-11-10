@@ -3,16 +3,19 @@ import {
   collection,
   doc,
   getDoc,
-  getDocs,
   getDocsFromServer,
   increment,
   limit,
+  onSnapshot,
+  orderBy,
   query,
   serverTimestamp,
   setDoc,
+  updateDoc,
   where,
   writeBatch,
   type Timestamp,
+  type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { QuizDocument } from '@/features/quiz/api/quiz';
@@ -46,7 +49,12 @@ export interface ShareDocument {
   topic: string;
   sharedBy: string;
   sharedAt: Timestamp;
+  /** Uids of participants who have deleted this share for themselves. */
+  deletedBy?: string[];
 }
+
+/** Which side(s) of a conversation the deletion applies to. */
+export type DeleteShareMode = 'me' | 'everyone';
 
 /** Both members of a pair must compute the same id; sort() makes it order-independent. */
 export function buildConvoId(uidA: string, uidB: string): string {
@@ -74,17 +82,6 @@ export async function getUserConvos(userId: string, maxCount = 50): Promise<Conv
   return convos.sort(
     (a, b) => (b.lastShareAt?.toMillis?.() ?? 0) - (a.lastShareAt?.toMillis?.() ?? 0)
   );
-}
-
-/**
- * The shares inside one convo, unsorted — the caller orders them (the convo
- * page renders oldest-first, chat-style).
- */
-export async function getConvoShares(convoId: string, maxCount = 50): Promise<ShareDocument[]> {
-  const snapshot = await getDocs(
-    query(collection(db, 'convos', convoId, 'shares'), limit(maxCount))
-  );
-  return snapshot.docs.map(d => ({ id: d.id, ...d.data() }) as ShareDocument);
 }
 
 /**
@@ -150,5 +147,72 @@ export async function shareQuizToUser(
     quizTitle: quiz.title,
     createdAt: serverTimestamp(),
   });
+  await batch.commit();
+}
+
+/**
+ * Real-time subscription to a convo's shares (newest 50 by sharedAt).
+ * Uses serverTimestamps: 'estimate' so pending writes arrive with an
+ * estimated sharedAt (prevents null-crash in formatRelativeTime and
+ * sorts the new share to the bottom after client-side reverse).
+ */
+export function subscribeToConvoShares(
+  convoId: string,
+  onNext: (shares: ShareDocument[]) => void,
+  onError: (err: Error) => void
+): Unsubscribe {
+  const q = query(
+    collection(db, 'convos', convoId, 'shares'),
+    orderBy('sharedAt', 'desc'),
+    limit(50)
+  );
+  return onSnapshot(q, snap => {
+    const shares = snap.docs.map(d => ({ id: d.id, ...d.data({ serverTimestamps: 'estimate' }) }) as ShareDocument);
+    onNext(shares.reverse());
+  }, onError);
+}
+
+/**
+ * "Delete for me" — append the caller's uid to deletedBy so the share
+ * remains visible to the other participant. The convo's list stats are
+ * shared state and must not change for a single-user deletion.
+ */
+export async function deleteShareForMe(convoId: string, shareId: string, myUid: string): Promise<void> {
+  await updateDoc(doc(db, 'convos', convoId, 'shares', shareId), { deletedBy: arrayUnion(myUid) });
+}
+
+/**
+ * "Delete for everyone" — hard delete the share doc and decrement
+ * shareCount, backfilling the convo's list stats from the next-newest
+ * remaining share (idempotent: if the deleted share wasn't the newest,
+ * the stats already match; if it was, the next share is promoted).
+ */
+export async function deleteShareForEveryone(
+  convoId: string,
+  share: ShareDocument,
+  allShares: ShareDocument[]
+): Promise<void> {
+  if (!share.id) throw new Error('Cannot delete a share without an id');
+  const batch = writeBatch(db);
+  batch.delete(doc(db, 'convos', convoId, 'shares', share.id));
+
+  const nextNewest = allShares
+    .filter(s => s.id !== share.id)
+    .reduce<ShareDocument | null>(
+      (acc, s) =>
+        !acc || (s.sharedAt?.toMillis?.() ?? 0) > (acc.sharedAt?.toMillis?.() ?? 0) ? s : acc,
+      null
+    );
+
+  const convoUpdate: Record<string, unknown> = { shareCount: increment(-1) };
+  if (nextNewest) {
+    convoUpdate.lastShareAt = nextNewest.sharedAt;
+    convoUpdate.lastQuizTitle = nextNewest.quizTitle;
+    convoUpdate.lastSharedBy = nextNewest.sharedBy;
+  } else {
+    convoUpdate.lastQuizTitle = '';
+    convoUpdate.lastSharedBy = '';
+  }
+  batch.update(doc(db, 'convos', convoId), convoUpdate);
   await batch.commit();
 }
