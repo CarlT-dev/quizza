@@ -6,6 +6,7 @@ import { getUserProfile } from '@/features/users';
 import { formatRelativeTime } from '@/shared/utils';
 import { getOtherParticipantUid, useFriendships } from '@/features/friends';
 import { getOtherParticipantId, getUserConvos, type ConvoDocument } from '../api/messages';
+import { MessagesPageSkeleton } from '../components/MessagesPageSkeleton';
 
 export function MessagesPage() {
   const navigate = useNavigate();
@@ -108,27 +109,13 @@ export function MessagesPage() {
 
   const renderContent = () => {
     if (authLoading || isLoading || friendsLoading || namesLoading) {
-      return (
-        <div className="max-w-[500px] mx-auto px-4 py-4" aria-hidden="true">
-          <div className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3 px-4 py-3">
-                <div className="w-11 h-11 rounded-full skeleton" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-4 w-28 skeleton skeleton-rounded" />
-                  <div className="h-3 w-44 skeleton skeleton-rounded" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      );
+      return <MessagesPageSkeleton />;
     }
 
     if (error) {
       return (
         <div className="flex-1 flex items-center justify-center px-4 py-12">
-          <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl border border-red-200 dark:border-red-800 p-8 text-center">
+          <div className="w-full max-w-md dark:bg-gray-800 p-8 text-center">
             <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
             <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Unable to Load Messages</h2>
             <p className="text-gray-500 dark:text-gray-400 mb-6">{error}</p>
@@ -161,8 +148,8 @@ export function MessagesPage() {
     }
 
     return (
-      <div className="max-w-[500px] mx-auto px-4 py-4">
-        <div className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+      <div className="max-w-[500px] mx-auto">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 overflow-hidden">
           {convos.map((convo) => {
             const otherUid = user ? getOtherParticipantId(convo, user.uid) : '';
             const name = names[otherUid] ?? otherUid.slice(0, 8);
@@ -171,7 +158,7 @@ export function MessagesPage() {
                 key={convo.id ?? otherUid}
                 type="button"
                 onClick={() => navigate(`/messages/${otherUid}`, { state: { username: name } })}
-                className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                className="w-full flex items-center gap-3 px-4 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
               >
                 <span className="w-11 h-11 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-600 dark:text-primary-400 font-medium text-lg flex-shrink-0">
                   {name.charAt(0).toUpperCase()}
@@ -219,8 +206,8 @@ export function MessagesPage() {
 
   return (
     <div className="flex-1 bg-primary-50/30 dark:bg-gray-900">
-      <header className="flex items-center px-4 py-3 mb-4 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-        <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Messages</h1>
+      <header className="flex items-center px-4 py-3 mb-1 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 shadow-sm">
+        <h1 className="text-xl font-semibold text-primary-900 dark:text-gray-100">Messages</h1>
       </header>
 
       <main className="pb-20">

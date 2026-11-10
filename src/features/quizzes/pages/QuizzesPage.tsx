@@ -308,7 +308,7 @@ export function QuizzesPage() {
     if (error) {
       return (
         <div className="flex-1 flex items-center justify-center px-4 py-12">
-          <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl border border-red-200 dark:border-red-800 p-8 text-center">
+          <div className="w-full max-w-md dark:bg-gray-800 p-8 text-center">
             <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
             <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Unable to Load Quizzes</h2>
             <p className="text-gray-500 dark:text-gray-400 mb-6">{error}</p>

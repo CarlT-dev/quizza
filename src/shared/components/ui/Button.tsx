@@ -2,7 +2,7 @@ import { forwardRef } from 'react';
 import type { ButtonHTMLAttributes } from 'react';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'none';
+  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'none' | 'destructive';
   size?: 'sm' | 'md' | 'lg';
   radius?: 'default' | 'rounded';
   isLoading?: boolean;
@@ -34,11 +34,12 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     };
 
     const variantStyles = {
-      primary: 'bg-primary-500 text-white hover:bg-primary-600 focus:ring-primary-500',
-      secondary: 'bg-gray-100 text-gray-900 hover:bg-gray-200 focus:ring-gray-500 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600',
-      outline: 'border-2 border-primary-500 text-primary-500 hover:bg-primary-50 focus:ring-primary-500 dark:hover:bg-primary-950',
-      ghost: 'text-primary-500 hover:bg-primary-50 focus:ring-primary-500 dark:hover:bg-primary-950',
-      none: 'text-primary-900'
+      primary: 'bg-primary-500 text-white hover:bg-primary-600',
+      secondary: 'bg-gray-100 text-gray-900 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600',
+      outline: 'border-2 border-primary-500 text-primary-500 focus:ring-primary-500 dark:hover:bg-primary-950',
+      ghost: 'text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-950',
+      none: 'text-primary-900',
+      destructive: 'bg-red-600 text-white hover:bg-red-700'
     };
 
     const sizeStyles = {

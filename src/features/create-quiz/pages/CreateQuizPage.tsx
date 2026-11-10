@@ -694,13 +694,13 @@ export function CreateQuizPage() {
                 onClose={() => setIsEasyActive(false)}
               />
               <TabButton
-                text="Medium"
+                text="Average"
                 isActive={isMediumActive}
                 onActivate={() => setIsMediumActive(true)}
                 onClose={() => setIsMediumActive(false)}
               />
               <TabButton
-                text="Hard"
+                text="Difficult"
                 isActive={isHardActive}
                 onActivate={() => setIsHardActive(true)}
                 onClose={() => setIsHardActive(false)}

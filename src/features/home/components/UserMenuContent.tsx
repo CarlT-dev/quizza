@@ -1,10 +1,10 @@
 import { useNavigate } from 'react-router-dom';
-import { Fragment, useState } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 import { User, Lock, SquarePen, LogOut, ChevronDown, UserPlus, Check, X } from 'lucide-react';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useAuth } from '@/features/auth/context/AuthContext';
-import { updateName } from '@/features/users';
+import { useUserProfile, updateName } from '@/features/users';
 import { Button, Card } from '@/shared/components/ui';
 
 // Mock additional accounts - in real app this would come from auth context/localStorage
@@ -26,15 +26,27 @@ export function UserMenuContent() {
   const { user, signOut } = useAuth();
   const [isProfileExpanded, setIsProfileExpanded] = useState(false);
 
+  // Fetch user profile from Firestore to get the display name (name field)
+  const { profile } = useUserProfile(user?.uid);
+
   // Name editing state
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
   const [isSavingName, setIsSavingName] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
-  // Displayed name state - initialized from Firebase Auth but updated optimistically after Firestore save
-  const [displayName, setDisplayName] = useState(user?.displayName || user?.email?.split('@')[0] || 'User');
+  // Displayed name state - initialized from Firebase Auth but updated from Firestore profile name
+  const [displayName, setDisplayName] = useState(
+    profile?.name || user?.displayName || user?.email?.split('@')[0] || 'User'
+  );
   const userEmail = user?.email || '';
   const userInitial = displayName.charAt(0).toUpperCase();
+
+  // Sync displayName from profile when it loads (async)
+  useEffect(() => {
+    if (profile?.name) {
+      setDisplayName(profile.name);
+    }
+  }, [profile?.name]);
 
   const isPasswordProvider = user?.providerData.some(p => p.providerId === 'password') ?? false;
 

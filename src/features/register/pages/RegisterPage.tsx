@@ -334,7 +334,7 @@ export function RegisterPage() {
               required
               autoComplete="new-password"
               icon="lock"
-              helperText="At least 8 characters"
+              helperText="Must at least 8 characters"
               aria-describedby={errors.password ? 'password-error' : 'password-hint'}
             />
 
