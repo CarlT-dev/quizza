@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, AlertTriangle, MessageCircle, Share2, Check, Loader2 } from 'lucide-react';
 import { useAuth } from '@/features/auth';
 import { useUserProfile } from '@/features/users';
 import { getCardColor, getQuizzesColorPreferences, getUserQuizzes, type CardColorId, type QuizDocument } from '@/features/quiz/api/quiz';
 import { formatRelativeTime } from '@/shared/utils';
-import { BottomSheet, Button } from '@/shared/components/ui';
-import { buildConvoId, getConvoShares, shareQuizToUser, type ShareDocument } from '../api/messages';
+import { BottomSheet, Button, ConfirmDialog } from '@/shared/components/ui';
+import { DeleteShareSheet } from '../components/DeleteShareSheet';
+import { buildConvoId, subscribeToConvoShares, shareQuizToUser, deleteShareForMe, deleteShareForEveryone, type ShareDocument, type DeleteShareMode } from '../api/messages';
+import { useLongPress } from '@/shared/hooks';
 
 export function ConvoPage() {
   const navigate = useNavigate();
@@ -15,10 +17,24 @@ export function ConvoPage() {
   const { user, loading: authLoading } = useAuth();
   const { profile, isLoading: profileLoading } = useUserProfile(otherUid);
 
-  const [shares, setShares] = useState<ShareDocument[]>([]);
+  const [shares, setShares] = useState<ShareDocument[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
+
+  // Deletion Flow State (Step 10)
+  const [exiting, setExiting] = useState<Map<string, ShareDocument>>(new Map());
+  const [held, setHeld] = useState<Map<string, ShareDocument>>(new Map());
+  const [inFlightForMe, setInFlightForMe] = useState<Set<string>>(new Set());
+  const [_inFlightEveryone, setInFlightEveryone] = useState<Set<string>>(new Set());
+  const [confirmedDeleted, setConfirmedDeleted] = useState<Set<string>>(new Set());
+  const [selectedShare, setSelectedShare] = useState<ShareDocument | null>(null);
+
+  // Delete confirmation dialog state
+  const [deleteConfirmMode, setDeleteConfirmMode] = useState<DeleteShareMode | null>(null);
+  const [deleteConfirmShare, setDeleteConfirmShare] = useState<ShareDocument | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Share sheet: my quizzes + their user-set card colors, multi-select.
   const [isShareOpen, setIsShareOpen] = useState(false);
@@ -39,43 +55,34 @@ export function ConvoPage() {
     profile?.name ?? profile?.username ?? stateUsername ?? (otherUid ? otherUid.slice(0, 8) : '?');
 
   useEffect(() => {
-    if (authLoading) return;
-    let cancelled = false;
+    if (!user || !otherUid) {
+      setError('Please log in to view conversations.');
+      setIsLoading(false);
+      return;
+    }
+    if (otherUid === user.uid) {
+      setIsLoading(false);
+      return;
+    }
 
-    // Deferred so setIsLoading isn't a synchronous effect setState
-    // (react(set-state-in-effect)) — same pattern as the quiz data hooks.
-    void Promise.resolve().then(async () => {
-      if (!user || !otherUid) {
-        setError('Please log in to view conversations.');
-        setIsLoading(false);
-        return;
-      }
-      if (otherUid === user.uid) {
-        setIsLoading(false);
-        return;
-      }
+    setIsLoading(true);
+    setError(null);
 
-      setIsLoading(true);
-      setError(null);
-      try {
-        const data = await getConvoShares(buildConvoId(user.uid, otherUid));
-        if (cancelled) return;
-        // Chat order: oldest at top, newest at bottom (user's pick)
-        setShares(
-          [...data].sort(
-            (a, b) => (a.sharedAt?.toMillis?.() ?? 0) - (b.sharedAt?.toMillis?.() ?? 0)
-          )
-        );
-      } catch (err) {
-        console.error('Failed to fetch shares:', err);
-        if (!cancelled) setError('Failed to load this conversation. Please try again.');
-      } finally {
-        if (!cancelled) setIsLoading(false);
+    const unsubscribe = subscribeToConvoShares(buildConvoId(user.uid, otherUid),
+      (shares) => {
+        // serverTimestamps:'estimate' is handled in the API, client reverses
+        setShares(shares.reverse());
+        setIsLoading(false);
+      },
+      (err) => {
+        console.error('Failed to subscribe to shares:', err);
+        setError('Failed to load this conversation. Please try again.');
+        setIsLoading(false);
       }
-    });
+    );
 
     return () => {
-      cancelled = true;
+      unsubscribe();
     };
   }, [user, otherUid, authLoading, reloadToken]);
 
@@ -127,34 +134,163 @@ export function ConvoPage() {
   // Sequential, not Promise.all: shareQuizToUser creates the convo doc when
   // it doesn't exist yet — parallel calls would race that creation and
   // clobber the convo's shareCount.
-  const handleShareSelected = async () => {
-    if (!user || !otherUid || selectedQuizIds.size === 0 || isSharing) return;
-    setIsSharing(true);
-    try {
-      for (const quiz of myQuizzes) {
-        const quizId = quiz.id;
-        if (!quizId || !selectedQuizIds.has(quizId)) continue;
-        await shareQuizToUser(quiz, user.uid, otherUid);
-        // Drop each quiz from the selection as it lands, so a retry after a
-        // mid-loop failure only shares the ones that didn't make it.
-        setSelectedQuizIds(prev => {
-          const next = new Set(prev);
-          next.delete(quizId);
-          return next;
+  const {
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
+    onPointerLeave,
+    onPointerCancel,
+    onContextMenu,
+    onClickCapture,
+  } = useLongPress((target) => {
+    const shareId = target.dataset.shareId;
+    if (!shareId) {
+      // Floating share button long-press → open share sheet
+      setIsShareOpen(true);
+      return;
+    }
+    // Message bubble long-press → open deletion sheet
+    const share = (shares ?? []).find((s) => s.id === shareId);
+    if (!share) return;
+    setSelectedShare(share);
+    setHeld((prev) => {
+      const next = new Map(prev);
+      next.set(shareId, share);
+      return next;
+    });
+  }, 450);
+
+  const handleDeleteShare = async (share: ShareDocument, mode: DeleteShareMode) => {
+    if (!user || !otherUid) return;
+    if (mode === 'me') {
+      setInFlightForMe(prev => new Set(prev).add(share.id ?? ''));
+      try {
+        await deleteShareForMe(buildConvoId(user.uid, otherUid), share.id ?? '', user.uid);
+        // On success, handleDeleted will run
+        handleDeleted(share, mode);
+      } catch (err) {
+        console.error('Failed to delete for me:', err);
+        setInFlightForMe(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(share.id ?? '');
+          return newSet;
         });
+        throw err;
+      }
+    } else { // 'everyone'
+      setInFlightEveryone(prev => new Set(prev).add(share.id ?? ''));
+      try {
+        const allShares = shares ?? [];
+        await deleteShareForEveryone(buildConvoId(user.uid, otherUid), share, allShares);
+        // On success, handleDeleted will run
+        handleDeleted(share, mode);
+      } catch (err) {
+        console.error('Failed to delete for everyone:', err);
+        setInFlightEveryone(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(share.id ?? '');
+          return newSet;
+        });
+        throw err;
+      }
+    }
+  };
+
+  const handleDeleted = (share: ShareDocument, _mode: DeleteShareMode) => {
+    // One React flush is needed here to guarantee state consistency
+    setConfirmedDeleted(prev => new Set(prev).add(share.id ?? ''));
+    setExiting(prev => {
+      const newMap = new Map(prev);
+      newMap.set(share.id ?? '', share);
+      return newMap;
+    });
+    setInFlightEveryone(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(share.id ?? '');
+      return newSet;
+    });
+    setInFlightForMe(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(share.id ?? '');
+      return newSet;
+    });
+    setSelectedShare(null);
+    setHeld((prev) => {
+      const next = new Map(prev);
+      next.delete(share.id ?? '');
+      return next;
+    });
+
+    // Schedule removal-diff animation (~260ms)
+    setTimeout(() => {
+      setExiting(prev => {
+        const newMap = new Map(prev);
+        if (newMap.has(share.id ?? '')) {
+          newMap.delete(share.id ?? '');
+          return newMap;
+        }
+        return prev; // Idempotent against snapshot removal-diff
+      });
+    }, 260);
+  };
+
+  // Delete confirmation handlers
+  const handleDeleteActionSelect = useCallback((mode: DeleteShareMode) => {
+    if (!selectedShare) return;
+    setDeleteConfirmMode(mode);
+    setDeleteConfirmShare(selectedShare);
+    setDeleteError(null);
+    setSelectedShare(null); // Close the sheet first, then confirm dialog opens
+  }, [selectedShare]);
+
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!deleteConfirmShare || !deleteConfirmMode) return;
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await handleDeleteShare(deleteConfirmShare, deleteConfirmMode);
+      // handleDeleted will be called by handleDeleteShare on success
+    } catch (err) {
+      console.error('Failed to delete share:', err);
+      setDeleteError('Deletion failed. Please try again.');
+    } finally {
+      setIsDeleting(false);
+      // Only reset confirm state on success; on error keep dialog open for retry
+      if (!deleteError) {
+        setDeleteConfirmMode(null);
+        setDeleteConfirmShare(null);
+      }
+    }
+  }, [deleteConfirmShare, deleteConfirmMode, deleteError, handleDeleteShare]);
+
+  const handleDeleteCancel = useCallback(() => {
+    setDeleteConfirmMode(null);
+    setDeleteConfirmShare(null);
+    setDeleteError(null);
+  }, []);
+
+  const handleShareSheetRetry = () => setShareSheetToken(token => token + 1);
+
+  const handleShareSelected = async () => {
+    if (selectedQuizIds.size === 0 || isSharing || !user || !otherUid) return;
+    setIsSharing(true);
+    setShareSheetError(null);
+    try {
+      for (const quizId of selectedQuizIds) {
+        const quiz = myQuizzes.find(q => q.id === quizId);
+        if (quiz) {
+          await shareQuizToUser(quiz, user.uid, otherUid);
+        }
       }
       setIsShareOpen(false);
       setSelectedQuizIds(new Set());
-      setReloadToken(token => token + 1);
     } catch (err) {
       console.error('Failed to share quiz:', err);
-      setShareSheetError('Failed to share. Please try again.');
+      setShareSheetError('Failed to share quiz. Please try again.');
     } finally {
       setIsSharing(false);
     }
   };
-
-  const handleShareSheetRetry = () => setShareSheetToken(token => token + 1);
 
   const renderContent = () => {
     if (isLoading || profileLoading) {
@@ -170,7 +306,7 @@ export function ConvoPage() {
     if (error) {
       return (
         <div className="max-w-[500px] mx-auto flex items-center justify-center py-12">
-          <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl border border-red-200 dark:border-red-800 p-8 text-center">
+          <div className="w-full max-w-md dark:bg-gray-800 p-8 text-center">
             <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
             <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Unable to Load Conversation</h2>
             <p className="text-gray-500 dark:text-gray-400 mb-6">{error}</p>
@@ -195,7 +331,7 @@ export function ConvoPage() {
       );
     }
 
-    if (shares.length === 0) {
+    if ((shares?.length ?? 0) === 0) {
       return (
         <div className="max-w-[500px] mx-auto px-4 py-12">
           <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">
@@ -211,15 +347,39 @@ export function ConvoPage() {
       );
     }
 
+    // Render list using all states
+    const myUid = user?.uid ?? '';
+
+    const renderList = [
+      ...(shares ?? []).filter(s => {
+        const id = s.id ?? '';
+        if (exiting.has(id)) return false;
+        if (confirmedDeleted.has(id)) return false;
+        if (held.has(id)) return false;
+        if ((s.deletedBy ?? []).includes(myUid) && !inFlightForMe.has(id)) return false;
+        return true;
+      }),
+      ...held.values(),
+      ...exiting.values(),
+    ].sort((a, b) => (a.sharedAt?.toMillis?.() ?? 0) - (b.sharedAt?.toMillis?.() ?? 0));
+
     return (
       <div className="max-w-[500px] mx-auto px-4 py-4 w-full flex flex-col gap-2">
-        {shares.map((share, index) => {
+        {renderList.map((share) => {
           const isMine = share.sharedBy === user?.uid;
           return (
             <button
-              key={share.id ?? `share-${index}`}
+              key={share.id ?? `share-${share.quizTitle}`}
               type="button"
+              data-share-id={share.id ?? ''}
               onClick={() => navigate(`/quiz/${share.quizId}`)}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerLeave={onPointerLeave}
+              onPointerCancel={onPointerCancel}
+              onContextMenu={onContextMenu}
+              onClickCapture={onClickCapture}
               className={`w-fit max-w-[85%] text-left rounded-2xl border p-3 transition-colors ${
                 isMine
                   ? 'ml-auto bg-primary-500 border-primary-500 text-white hover:bg-primary-600'
@@ -370,6 +530,13 @@ export function ConvoPage() {
         <button
           type="button"
           onClick={() => setIsShareOpen(true)}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerLeave={onPointerLeave}
+          onPointerCancel={onPointerCancel}
+          onContextMenu={onContextMenu}
+          onClickCapture={onClickCapture}
           aria-label="Share a quiz"
           className="fixed bottom-6 right-4 z-30 w-14 h-14 rounded-full bg-primary-500 hover:bg-primary-600 text-white shadow-lg flex items-center justify-center transition-transform active:scale-95"
         >
@@ -384,6 +551,38 @@ export function ConvoPage() {
       >
         {renderShareSheetContent()}
       </BottomSheet>
+
+      <DeleteShareSheet
+        share={selectedShare}
+        currentUserId={user?.uid ?? null}
+        onClose={() => {
+          setSelectedShare(null);
+          setHeld((prev) => {
+            const next = new Map(prev);
+            if (selectedShare?.id) next.delete(selectedShare.id);
+            return next;
+          });
+        }}
+        onActionSelect={handleDeleteActionSelect}
+      />
+
+      {/* Delete Confirmation Dialog — at page level, outside any BottomSheet */}
+      <ConfirmDialog
+        isOpen={deleteConfirmMode != null}
+        title={deleteConfirmMode === 'me' ? 'Delete for you?' : 'Delete for everyone?'}
+        message={
+          deleteConfirmMode === 'me'
+            ? 'This shared quiz will only be removed from your conversation. The other participant can still see it.'
+            : 'This shared quiz will be removed from the conversation for both participants.'
+        }
+        confirmLabel="Confirm"
+        cancelLabel="Cancel"
+        destructive={deleteConfirmMode === 'everyone'}
+        isLoading={isDeleting}
+        error={deleteError}
+        onConfirm={handleDeleteConfirm}
+        onCancel={handleDeleteCancel}
+      />
     </div>
   );
 }

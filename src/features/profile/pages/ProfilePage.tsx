@@ -1,5 +1,4 @@
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, AlertTriangle, UserX } from 'lucide-react';
+import { AlertTriangle, UserX } from 'lucide-react';
 import { useCurrentUserProfile } from '../hooks/useCurrentUserProfile';
 import { ProfileHeader } from '../components/ProfileHeader';
 import { CreatedQuizzes } from '../components/CreatedQuizzes';
@@ -11,24 +10,10 @@ export function formatDate(iso: string): string {
 }
 
 export function ProfilePage() {
-  const navigate = useNavigate();
   const { profile, isLoading, error, refetch, updateBio } = useCurrentUserProfile();
 
   return (
-    <div className="flex-1 bg-primary-50/50 dark:bg-gray-900">
-      {/* Header with back button — no footer nav on profile pages */}
-      <header className="flex items-center gap-2 px-4 py-3 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
-        <button
-          type="button"
-          onClick={() => navigate(-1)}
-          className="p-1.5 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-          aria-label="Go back"
-        >
-          <ArrowLeft className="w-5 h-5" aria-hidden="true" />
-        </button>
-        <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Profile</h1>
-      </header>
-
+    <div className="relative flex-1 bg-primary-50/50 dark:bg-gray-900">
       <main className="pb-8">
         {isLoading ? (
           <div className="max-w-[500px] mx-auto px-4" aria-hidden="true">
@@ -78,6 +63,8 @@ export function ProfilePage() {
               quizzesCreated={profile.quizzesCreated}
               quizzesTaken={profile.quizzesTaken}
               bestAccuracy={profile.bestAccuracy}
+              onBack={() => window.history.back()}
+              title="Profile"
             />
 
             <div className='px-4 mb-2 mt-6'>

@@ -137,6 +137,27 @@ service cloud.firestore {
           request.resource.data.sharedBy == request.auth.uid &&
           request.auth.uid in
           get(/databases/$(database)/documents/convos/$(convoId)).data.participants;
+
+        // "Delete for me": participants may append ONLY their own uid to
+        // deletedBy — diff() makes that the ONLY mutable field; additions-only
+        // + the difference check means a caller can never add the other side's
+        // uid.
+        allow update: if request.auth != null &&
+          request.auth.uid in
+          get(/databases/$(database)/documents/convos/$(convoId)).data.participants &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deletedBy']) &&
+          request.resource.data.deletedBy is list &&
+          request.resource.data.deletedBy.hasAll(resource.data.get('deletedBy', [])) &&
+          request.resource.data.deletedBy.toSet()
+            .difference(resource.data.get('deletedBy', []).toSet())
+            .hasOnly([request.auth.uid]);
+
+        // "Delete for everyone": sender-only hard delete — the UI only offers
+        // the menu on your own messages.
+        allow delete: if request.auth != null &&
+          resource.data.sharedBy == request.auth.uid &&
+          request.auth.uid in
+          get(/databases/$(database)/documents/convos/$(convoId)).data.participants;
       }
     }
 

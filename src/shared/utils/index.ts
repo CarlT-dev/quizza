@@ -7,3 +7,4 @@ export {
 } from './quizStats';
 export type { AttemptScore, FirstAttemptSource, UserStats } from './quizStats';
 export { formatRelativeTime } from './relativeTime';
+export { vibrate } from './haptics';

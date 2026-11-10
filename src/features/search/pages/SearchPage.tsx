@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, X, ChevronRight, SearchX } from 'lucide-react';
 import { useDebouncedValue } from '@/shared/hooks';
-import { searchUsernames, type UsernameSearchResult } from '../api/search';
+import { searchUsernames, searchNames, type UsernameSearchResult } from '../api/search';
 
 const DEBOUNCE_MS = 250;
 const MAX_PEOPLE_RESULTS = 10;
@@ -33,10 +33,50 @@ export function SearchPage() {
 
       setIsSearching(true);
       try {
-        // People come from a prefix query on the public usernames collection
-        const nameResults = await searchUsernames(trimmed, MAX_PEOPLE_RESULTS);
+        // Run both searches in parallel: username prefix + name prefix
+        const [usernameResults, nameResults] = await Promise.all([
+          searchUsernames(trimmed, MAX_PEOPLE_RESULTS),
+          searchNames(trimmed, MAX_PEOPLE_RESULTS),
+        ]);
         if (cancelled) return;
-        setPeople(nameResults);
+
+        // Merge and deduplicate by uid
+        const merged = new Map<string, UsernameSearchResult>();
+
+        // Add username results first (higher priority)
+        for (const r of usernameResults) {
+          merged.set(r.uid, r);
+        }
+        // Add name results (lower priority, only if not already present)
+        for (const r of nameResults) {
+          if (!merged.has(r.uid)) {
+            merged.set(r.uid, r);
+          }
+        }
+
+        // Convert to array and sort: exact username matches first, then name matches, then prefix matches
+        const combined = Array.from(merged.values()).sort((a, b) => {
+          const aUsernameExact = a.username === trimmed;
+          const bUsernameExact = b.username === trimmed;
+          if (aUsernameExact && !bUsernameExact) return -1;
+          if (!aUsernameExact && bUsernameExact) return 1;
+
+          const aNameExact = a.name?.toLowerCase() === trimmed;
+          const bNameExact = b.name?.toLowerCase() === trimmed;
+          if (aNameExact && !bNameExact) return -1;
+          if (!aNameExact && bNameExact) return 1;
+
+          // Then by username prefix match priority
+          const aUsernamePrefix = a.username.startsWith(trimmed);
+          const bUsernamePrefix = b.username.startsWith(trimmed);
+          if (aUsernamePrefix && !bUsernamePrefix) return -1;
+          if (!aUsernamePrefix && bUsernamePrefix) return 1;
+
+          return 0;
+        });
+
+        // Limit to max results
+        setPeople(combined.slice(0, MAX_PEOPLE_RESULTS));
         setError(null);
       } catch (err) {
         console.error('Search failed:', err);
@@ -73,8 +113,8 @@ export function SearchPage() {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search people"
-            aria-label="Search people"
+            placeholder="Search people by name or username"
+            aria-label="Search people by name or username"
             autoFocus
             autoComplete="off"
             className="w-full bg-gray-100 dark:bg-gray-800 rounded-xl pl-10 pr-10 py-2.5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -98,7 +138,7 @@ export function SearchPage() {
             <Search className="w-12 h-12 text-gray-300 dark:text-gray-600 mb-4" aria-hidden="true" />
             <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-1">Search Quizza</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 max-w-xs">
-              Find people by username.
+              Find people by name or username.
             </p>
           </div>
         ) : error ? (
