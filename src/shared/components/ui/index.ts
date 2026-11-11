@@ -7,3 +7,4 @@ export { PageTransition, AnimatePage } from './PageTransition';
 export { SlidePanel } from './SlidePanel';
 export { BottomSheet } from './BottomSheet';
 export { StatTile } from './StatTile';
+export { ConfirmDialog } from './ConfirmDialog';

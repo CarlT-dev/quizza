@@ -17,6 +17,12 @@ interface BottomSheetProps {
   className?: string;
   /** Custom className for content area */
   contentClassName?: string;
+  /**
+   * Panel height. Defaults to "h-[50dvh]".
+   * Use "none" for no height constraint (content-driven height).
+   * Accepts any valid Tailwind height utility (e.g., "h-[80dvh]", "h-full", "max-h-[60vh]").
+   */
+  height?: string;
 }
 
 type AnimationPhase = 'closed' | 'opening' | 'open' | 'closing';
@@ -38,6 +44,7 @@ export function BottomSheet({
   showCloseButton = true,
   className = '',
   contentClassName = '',
+  height,
 }: BottomSheetProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const previousActiveElement = useRef<HTMLElement | null>(null);
@@ -92,6 +99,9 @@ export function BottomSheet({
   const panelAnimation = isClosing ? 'animate-slide-out-down' : 'animate-slide-in-up';
   const backdropAnimation = isClosing ? 'animate-fade-out' : 'animate-fade-in';
 
+  // Compute height class: "none" = no height constraint, undefined = default 50dvh, otherwise use custom value
+  const heightClass = height === 'none' ? '' : (height ?? 'h-[50dvh]');
+
   return (
     <>
       {/* Backdrop Overlay — tapping outside closes */}
@@ -104,7 +114,7 @@ export function BottomSheet({
       {/* Bottom Sheet — anchored to the bottom, half screen, rounded top */}
       <div
         ref={panelRef}
-        className={`fixed bottom-0 left-0 right-0 z-50 mx-auto w-full max-w-[500px] h-[50dvh] rounded-t-2xl bg-white dark:bg-gray-800 shadow-xl flex flex-col ${panelAnimation} ${className}`}
+        className={`fixed bottom-0 left-0 right-0 z-50 mx-auto w-full max-w-[500px] ${heightClass} rounded-t-2xl bg-white dark:bg-gray-800 shadow-xl flex flex-col ${panelAnimation} ${className}`}
         role="dialog"
         aria-label={title}
         aria-modal="true"

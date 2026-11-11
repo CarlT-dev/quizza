@@ -349,7 +349,7 @@ export function QuizPage() {
         <div className="flex-1 bg-primary-50/10 dark:bg-gray-900 flex flex-col">
           {renderStartHeader()}
           <main className="flex-1 flex items-center justify-center px-4">
-            <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl border border-red-200 dark:border-red-800 p-8 text-center">
+            <div className="w-full max-w-md dark:bg-gray-800 p-8 text-center">
               <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
               <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Unable to load quiz</h2>
               <p className="text-gray-500 dark:text-gray-400 mb-6">{error}</p>
@@ -525,7 +525,7 @@ export function QuizPage() {
         <div className="flex-1 flex flex-col">
           {/* Question Number & Type Badge */}
             <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-              <span className="text-xs font-medium text-primary-600 dark:text-primary-400">
+              <span className="text-md font-semibold text-primary-600 dark:text-primary-400">
                 Question {currentIndex + 1}
               </span>
             </div>

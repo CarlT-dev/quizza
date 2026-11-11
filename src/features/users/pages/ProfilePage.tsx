@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, AlertTriangle, UserX, Loader2, Calendar } from 'lucide-react';
+import { useParams } from 'react-router-dom';
+import { AlertTriangle, ArrowLeft, UserX, Loader2, Calendar } from 'lucide-react';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { Button } from '@/shared/components/ui';
 import { useAuth } from '@/features/auth';
@@ -40,7 +40,6 @@ function relationTo(
 }
 
 export function ProfilePage() {
-  const navigate = useNavigate();
   const { uid } = useParams<{ uid: string }>();
   const { user } = useAuth();
   const { profile, isLoading, error, refetch } = useUserProfile(uid);
@@ -98,20 +97,7 @@ export function ProfilePage() {
   const hasBio = profile?.bio && profile.bio.trim().length > 0;
 
   return (
-    <div className="flex-1 bg-primary-50/30 dark:bg-gray-900">
-      {/* Header with back button — no footer nav on profile pages */}
-      <header className="flex items-center gap-2 px-4 py-3 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
-        <button
-          type="button"
-          onClick={() => navigate(-1)}
-          className="p-1.5 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-          aria-label="Go back"
-        >
-          <ArrowLeft className="w-5 h-5" aria-hidden="true" />
-        </button>
-        <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Profile</h1>
-      </header>
-
+    <div className="flex-1 bg-primary-50/50 dark:bg-gray-900">
       <main className="pb-8">
         {isLoading ? (
           <div className="max-w-[500px] mx-auto px-4" aria-hidden="true">
@@ -155,11 +141,23 @@ export function ProfilePage() {
         ) : (
           <div className="max-w-[500px] mx-auto">
             {/* Profile Header with Gradient Background */}
-            <div className="relative overflow-hidden border-b-2 border-gray-300/40 mb-4">
+           <div className="relative overflow-hidden pb-4 mb-4">
               {/* Gradient background overlay - transparent base */}
-              <div className="absolute inset-0 bg-gradient-to-b from-primary-100/60 via-primary-50/30 to-white/60 dark:from-primary-900/30 dark:via-primary-900/20 dark:to-primary-900/20" aria-hidden="true" />
+              <div className="absolute inset-0 bg-gradient-to-b from-primary-100/60 via-primary-50/30 to-white/60 dark:from-primary-100/60 dark:via-primary-300/20 dark:to-primary-900/20" aria-hidden="true" />
 
-              <div className="relative flex flex-col items-center px-6 pt-8 pb-0 text-center">
+              {/* Header overlay: back button + title positioned over the gradient background */}
+              <div className="absolute top-0 left-0 right-0 px-4 py-3 flex items-center justify-between z-10">
+                <button
+                  type="button"
+                  onClick={() => window.history.back()}
+                  className="p-1.5 rounded-lg dark:text-white"
+                  aria-label="Go back"
+                >
+                  <ArrowLeft className="w-5 h-5" aria-hidden="true" />
+                </button>
+              </div>
+
+              <div className="relative flex flex-col items-center px-6 pt-16 pb-0 text-center">
                 {/* Avatar */}
                 <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-bold text-4xl shadow-lg shadow-primary-500/30">
                   {initial}
@@ -212,9 +210,9 @@ export function ProfilePage() {
                 )}
 
                 {/* Stats - inline with transparent background */}
-                <div className="w-full max-w-xl px-4 mt-4">
+                <div className="w-full max-w-xl px-4">
                   <div className="flex justify-center">
-                    <div className="flex bg-white/30 dark:bg-gray-800/30 backdrop-blur-sm border border-white/50 dark:border-gray-700/50 overflow-hidden">
+                    <div className="flex backdrop-blur-sm overflow-hidden">
                       <StatItem
                         value={profile.stats?.iq ?? '—'}
                         label="IQ"
@@ -243,16 +241,16 @@ export function ProfilePage() {
                     ) : relation === 'incoming' ? (
                       <div className="flex items-center gap-2 w-full">
                         <Button
-                          size="sm"
-                          className="flex-1"
+                          size="md"
+                          className="flex-1 py-4 font-semibold"
                           onClick={() => runFriendAction(() => acceptFriendRequest(uid!))}
                         >
                           Accept
                         </Button>
                         <Button
-                          size="sm"
+                          size="md"
                           variant="secondary"
-                          className="flex-1"
+                          className="flex-1 py-4 font-semibold"
                           onClick={() => runFriendAction(() => declineFriendRequest(uid!))}
                         >
                           Decline
@@ -260,29 +258,29 @@ export function ProfilePage() {
                       </div>
                     ) : relation === 'friends' ? (
                       <Button
-                        size="sm"
+                        size="md"
                         variant="ghost"
-                        className="text-red-600 dark:text-red-400 w-full"
+                        className="text-red-600 dark:text-red-400 w-full py-4 font-semibold"
                         onClick={() => runFriendAction(() => removeFriend(uid!))}
                       >
                         Remove Friend
                       </Button>
                     ) : relation === 'requested' ? (
                       <Button
-                        size="sm"
+                        size="md"
                         variant="secondary"
-                        className="w-full"
+                        className="w-full py-4 font-semibold"
                         onClick={() => runFriendAction(() => cancelFriendRequest(uid!))}
                       >
                         Cancel request
                       </Button>
                     ) : (
-                      <Button size="sm" className="w-full" onClick={handleAddFriend}>
+                      <Button size="md" className="w-full py-4 font-semibold" onClick={handleAddFriend}>
                         Add Friend
                       </Button>
                     )}
                     {failed && (
-                      <p className="mt-2 text-xs text-red-600 dark:text-red-400 text-center" role="alert">
+                      <p className="mt-2 text-sm py-4 text-red-600 dark:text-red-400 text-center" role="alert">
                         Something went wrong — try again.
                       </p>
                     )}

@@ -162,6 +162,36 @@ body {
   }
 }
 
+@keyframes pop-in {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes pop-out {
+  from {
+    transform: scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+}
+
+.animate-pop-in {
+  animation: pop-in 200ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.animate-pop-out {
+  animation: pop-out 150ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
 .animate-slide-in-right {
   animation: slide-in-right 300ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
@@ -233,6 +263,8 @@ body {
   .animate-slide-out-down,
   .animate-fade-in,
   .animate-fade-out,
+  .animate-pop-in,
+  .animate-pop-out,
   .skeleton,
   .progress-shimmer {
     animation-duration: 0.01ms !important;
