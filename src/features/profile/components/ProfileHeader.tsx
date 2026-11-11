@@ -34,7 +34,6 @@ export function ProfileHeader({
   quizzesTaken,
   bestAccuracy,
   onBack,
-  title
 }: ProfileHeaderProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editBio, setEditBio] = useState(bio ?? '');
