@@ -13,6 +13,7 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   error?: string;
   helperText?: string;
   icon?: string;
+  focus?: string;
 }
 
 const iconMap: Record<string, LucideIcon> = {
@@ -24,7 +25,7 @@ const iconMap: Record<string, LucideIcon> = {
 };
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, helperText, className = '', id, icon, type, ...props }, ref) => {
+  ({ label, error, helperText, className = '', id, icon, focus, type, ...props }, ref) => {
     const inputId = id || label?.toLowerCase().replace(/\s+/g, '-');
     const [showPassword, setShowPassword] = useState(false);
     const isPassword = type === 'password';
@@ -60,7 +61,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
               bg-white dark:bg-gray-800
               text-gray-900 dark:text-gray-100
               placeholder:text-gray-400 dark:placeholder:text-gray-500
-              focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
+              focus:outline-none 
+              ${focus === "none" ? "focus:ring-1 focus:ring-gray-200" : "focus:ring-2 focus:ring-primary-500"} focus:border-transparent
               disabled:opacity-50 disabled:cursor-not-allowed
               ${icon ? 'pl-10' : 'px-4'}
               pr-10
