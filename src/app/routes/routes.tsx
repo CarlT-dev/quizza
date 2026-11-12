@@ -34,7 +34,7 @@ export function AppRoutes() {
           <Route path="/quiz/:quiz/results/:uid" element={<Layout><OwnerResultDetailPage /></Layout>} />
           <Route path="/profile" element={<Layout title="Profile" showFooterNav><CurrentUserProfilePage /></Layout>} />
           <Route path="/messages" element={<Layout title="Messages" showFooterNav><MessagesPage /></Layout>} />
-          <Route path="/messages/:uid" element={<Layout title="Conversation"><ConvoPage /></Layout>} />
+          <Route path="/messages/:uid" element={<Layout title="Conversation" minHeight={false}><ConvoPage /></Layout>} />
           <Route path="/user" element={<Navigate to="/404" replace />} />
           <Route path="/user/:uid" element={<Layout title="Profile"><ViewProfilePage /></Layout>} />
         </Route>

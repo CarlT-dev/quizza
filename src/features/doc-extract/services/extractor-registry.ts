@@ -9,6 +9,7 @@
 import { DocExtractError, type ExtractResult, type ExtractorAdapter } from '../types';
 import { docxAdapter } from './adapters/docx.adapter';
 import { pdfAdapter } from './adapters/pdf.adapter';
+import { pptxAdapter } from './adapters/pptx.adapter';
 
 /** Files above this size are rejected before parsing. */
 export const MAX_FILE_BYTES = 20 * 1024 * 1024; // 20MB
@@ -26,6 +27,7 @@ export function registerAdapter(adapter: ExtractorAdapter): void {
 
 registerAdapter(docxAdapter);
 registerAdapter(pdfAdapter);
+registerAdapter(pptxAdapter);
 
 function extensionOf(fileName: string): string {
   const dot = fileName.lastIndexOf('.');
