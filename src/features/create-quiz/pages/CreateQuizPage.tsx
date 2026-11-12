@@ -37,9 +37,9 @@ type Attachment = {
 // Combined extracted-text budget across accepted attachments (decided in
 // selection order): the file that would push the total past this limit is
 // neglected with an error instead of being silently truncated.
-const MAX_TOTAL_CONTEXT_CHARS = 10_000;
+const MAX_TOTAL_CONTEXT_CHARS = 30_000;
 
-// Every attachment transition is a pure reducer action. The 10,000-char
+// Every attachment transition is a pure reducer action. The 30,000-char
 // budget is DERIVED at decision time (sum of accepted rows), so removing
 // a row mid-flight or uploading a second batch can never desync it from
 // the "total across all accepted files" requirement.
@@ -558,11 +558,11 @@ export function CreateQuizPage() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".docx,.pdf"
+                accept=".docx,.pdf,.pptx"
                 multiple
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 onChange={handleFileChange}
-                aria-label="Upload quiz file (DOCX or PDF)"
+                aria-label="Upload quiz file (DOCX, PDF, or PPTX)"
               />
 
               <div className="space-y-1">
@@ -575,7 +575,7 @@ export function CreateQuizPage() {
                 </div>
 
                 <p className="text-xs text-gray-400 dark:text-gray-500">
-                  Supports: DOCX, PDF · select several · 10,000-character combined limit
+                  Supports: DOCX, PDF, PPTX · select several · 30,000-character combined limit
                 </p>
               </div>
             </div>

@@ -341,7 +341,11 @@ export function RegisterPage() {
             <Input
               label="Confirm Password"
               type="password"
+<<<<<<< HEAD
               placeholder="Confirm Password"
+=======
+              placeholder="Confirm password"
+>>>>>>> master
               value={formData.confirmPassword}
               onChange={e => handleInputChange('confirmPassword', e.target.value)}
               error={errors.confirmPassword}

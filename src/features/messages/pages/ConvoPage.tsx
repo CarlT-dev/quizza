@@ -1,14 +1,16 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, AlertTriangle, MessageCircle, Share2, Check, Loader2 } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, MessageCircle, Share2, Check, Loader2, MoreVertical, Search, Edit, Trash2, UserX, X } from 'lucide-react';
 import { useAuth } from '@/features/auth';
 import { useUserProfile } from '@/features/users';
 import { getCardColor, getQuizzesColorPreferences, getUserQuizzes, type CardColorId, type QuizDocument } from '@/features/quiz/api/quiz';
 import { formatRelativeTime } from '@/shared/utils';
-import { BottomSheet, Button, ConfirmDialog } from '@/shared/components/ui';
+import { BottomSheet, Button, ConfirmDialog, SlidePanel, Input } from '@/shared/components/ui';
 import { DeleteShareSheet } from '../components/DeleteShareSheet';
 import { buildConvoId, subscribeToConvoShares, shareQuizToUser, deleteShareForMe, deleteShareForEveryone, type ShareDocument, type DeleteShareMode } from '../api/messages';
+import { removeFriend } from '@/features/friends';
 import { useLongPress } from '@/shared/hooks';
+import { useMessageScroll } from '../hooks/useMessageScroll';
 
 export function ConvoPage() {
   const navigate = useNavigate();
@@ -46,13 +48,58 @@ export function ConvoPage() {
   const [isSharing, setIsSharing] = useState(false);
   const [shareSheetToken, setShareSheetToken] = useState(0);
 
+  // Conversation menu panel
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  // Search within conversation
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Nickname for this conversation (stored locally)
+  const [nickname, setNickname] = useState<string>(() => {
+    if (typeof window !== 'undefined' && otherUid && user) {
+      const convoId = buildConvoId(user.uid, otherUid);
+      return localStorage.getItem(`convo_nickname_${convoId}`) ?? '';
+    }
+    return '';
+  });
+
+  // Delete conversation confirmation
+  const [isDeleteConvoConfirmOpen, setIsDeleteConvoConfirmOpen] = useState(false);
+  const [isDeleteConvoLoading, setIsDeleteConvoLoading] = useState(false);
+  const [deleteConvoError, setDeleteConvoError] = useState<string | null>(null);
+
+  // Unfriend confirmation
+  const [isUnfriendConfirmOpen, setIsUnfriendConfirmOpen] = useState(false);
+  const [isUnfriendLoading, setIsUnfriendLoading] = useState(false);
+  const [unfriendError, setUnfriendError] = useState<string | null>(null);
+
+  // Nickname editing state
+  const [isEditingNickname, setIsEditingNickname] = useState(false);
+  const [nicknameInput, setNicknameInput] = useState('');
+
+  // Search conversation state
+  const [showSearch, setShowSearch] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
   const isSelf = Boolean(user && otherUid === user.uid);
   // Freshest first: the loaded profile (also corrects renames), then the
   // username the previous screen handed over in navigation state (renders
   // on the first frame, no fetch), then a uid slice for direct URL entry.
   const stateUsername = (location.state as { username?: string } | null)?.username;
-  const displayName =
+  const baseDisplayName =
     profile?.name ?? profile?.username ?? stateUsername ?? (otherUid ? otherUid.slice(0, 8) : '?');
+  // Use nickname if set, otherwise fall back to base display name
+  const displayName = nickname || baseDisplayName;
+
+  // Scroll management for Messenger-like behavior
+  const {
+    containerRef: messagesContainerRef,
+    handleScroll,
+  } = useMessageScroll({
+    threshold: 100,
+    triggerDeps: shares ?? [],
+    conversationKey: otherUid,
+  });
 
   useEffect(() => {
     if (!user || !otherUid) {
@@ -87,6 +134,134 @@ export function ConvoPage() {
   }, [user, otherUid, authLoading, reloadToken]);
 
   const handleRetry = () => setReloadToken(token => token + 1);
+
+  // Menu panel handlers
+  const handleOpenMenu = () => setIsMenuOpen(true);
+  const handleCloseMenu = () => {
+    setIsMenuOpen(false);
+    setIsEditingNickname(false);
+    setNicknameInput('');
+    setShowSearch(false);
+    setSearchQuery('');
+  };
+
+  // Search conversation
+  const handleSearchConversation = () => {
+    setIsMenuOpen(false);
+    setShowSearch(true);
+    setSearchQuery('');
+    // Focus the input after the transition starts
+    setTimeout(() => {
+      searchInputRef.current?.focus();
+    }, 50);
+  };
+
+  const handleClearSearch = () => {
+    setShowSearch(false);
+    setSearchQuery('');
+  };
+
+  // Nickname handling
+  const handleSetNickname = () => {
+    setNicknameInput(nickname);
+    setIsEditingNickname(true);
+  };
+
+  const handleSaveNickname = () => {
+    const trimmed = nicknameInput.trim();
+    setNickname(trimmed);
+    if (user && otherUid) {
+      const convoId = buildConvoId(user.uid, otherUid);
+      if (trimmed) {
+        localStorage.setItem(`convo_nickname_${convoId}`, trimmed);
+      } else {
+        localStorage.removeItem(`convo_nickname_${convoId}`);
+      }
+    }
+    setIsEditingNickname(false);
+    setNicknameInput('');
+    setIsMenuOpen(false);
+  };
+
+  const handleCancelNickname = () => {
+    setIsEditingNickname(false);
+    setNicknameInput('');
+  };
+
+  // Delete conversation (delete all shares for me)
+  const handleDeleteConvo = () => {
+    setIsMenuOpen(false);
+    setIsDeleteConvoConfirmOpen(true);
+    setDeleteConvoError(null);
+  };
+
+  const handleDeleteConvoConfirm = async () => {
+    if (!user || !otherUid) return;
+    setIsDeleteConvoLoading(true);
+    setDeleteConvoError(null);
+    try {
+      const convoId = buildConvoId(user.uid, otherUid);
+      const allShares = shares ?? [];
+      // Delete all shares for me
+      for (const share of allShares) {
+        if (share.id) {
+          await deleteShareForMe(convoId, share.id, user.uid);
+        }
+      }
+      setIsDeleteConvoConfirmOpen(false);
+      navigate('/messages');
+    } catch (err) {
+      console.error('Failed to delete conversation:', err);
+      setDeleteConvoError('Failed to delete conversation. Please try again.');
+    } finally {
+      setIsDeleteConvoLoading(false);
+    }
+  };
+
+  const handleDeleteConvoCancel = () => {
+    setIsDeleteConvoConfirmOpen(false);
+    setDeleteConvoError(null);
+  };
+
+  // Unfriend
+  const handleUnfriend = () => {
+    setIsMenuOpen(false);
+    setIsUnfriendConfirmOpen(true);
+    setUnfriendError(null);
+  };
+
+  const handleUnfriendConfirm = async () => {
+    if (!user || !otherUid) return;
+    setIsUnfriendLoading(true);
+    setUnfriendError(null);
+    try {
+      // First unfriend
+      const unfriendResult = await removeFriend(otherUid);
+      if (!unfriendResult) {
+        throw new Error('Failed to unfriend');
+      }
+      // Then delete all shares for me
+      const convoId = buildConvoId(user.uid, otherUid);
+      const allShares = shares ?? [];
+      for (const share of allShares) {
+        if (share.id) {
+          await deleteShareForMe(convoId, share.id, user.uid);
+        }
+      }
+      setIsUnfriendConfirmOpen(false);
+      navigate('/messages');
+    } catch (err) {
+      console.error('Failed to unfriend:', err);
+      setUnfriendError('Failed to unfriend. Please try again.');
+    } finally {
+      setIsUnfriendLoading(false);
+    }
+  };
+
+  const handleUnfriendCancel = () => {
+    setIsUnfriendConfirmOpen(false);
+    setUnfriendError(null);
+  };
 
   // Load my quizzes + their color preferences while the share sheet is open
   // (fresh per open, so a just-created quiz shows up).
@@ -350,7 +525,7 @@ export function ConvoPage() {
     // Render list using all states
     const myUid = user?.uid ?? '';
 
-    const renderList = [
+    const baseList = [
       ...(shares ?? []).filter(s => {
         const id = s.id ?? '';
         if (exiting.has(id)) return false;
@@ -361,10 +536,28 @@ export function ConvoPage() {
       }),
       ...held.values(),
       ...exiting.values(),
-    ].sort((a, b) => (a.sharedAt?.toMillis?.() ?? 0) - (b.sharedAt?.toMillis?.() ?? 0));
+    ];
+
+    // Apply search filter if query exists
+    const filteredList = searchQuery
+      ? baseList.filter((share) =>
+          share.quizTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (share.topic?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false)
+        )
+      : baseList;
+
+    const renderList = filteredList.sort(
+      (a, b) => (a.sharedAt?.toMillis?.() ?? 0) - (b.sharedAt?.toMillis?.() ?? 0)
+    );
 
     return (
-      <div className="max-w-[500px] mx-auto px-4 py-4 w-full flex flex-col gap-2">
+      <div className="max-w-[500px] mx-auto px-4 py-4 pb-20 w-full flex flex-col gap-2">
+        {renderList.length === 0 && searchQuery && (
+          <div className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+            No conversations match "{searchQuery}"
+          </div>
+        )}
+
         {renderList.map((share) => {
           const isMine = share.sharedBy === user?.uid;
           return (
@@ -495,9 +688,9 @@ export function ConvoPage() {
   };
 
   return (
-    <div className="flex-1 bg-primary-50/30 dark:bg-gray-900">
+    <div className="flex flex-col h-screen bg-primary-50/30 dark:bg-gray-900">
       {/* Header with back button — no footer nav on conversation pages */}
-      <header className="flex items-center gap-2 px-4 py-3 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+      <header className="sticky top-0 z-20 flex items-center gap-2 px-4 py-3 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
         <button
           type="button"
           onClick={() => navigate('/messages')}
@@ -506,22 +699,81 @@ export function ConvoPage() {
         >
           <ArrowLeft className="w-5 h-5" aria-hidden="true" />
         </button>
-        <span className="w-9 h-9 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-600 dark:text-primary-400 font-medium flex-shrink-0">
-          {displayName.charAt(0).toUpperCase()}
-        </span>
-        <div className="flex-1 min-w-0">
-          <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100 min-w-0 truncate">
-            {displayName}
-          </h1>
-          {profile?.name && (
-            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-              @{profile.username}
-            </p>
-          )}
-        </div>
+        <button
+          type="button"
+          onClick={() => otherUid && navigate(`/user/${otherUid}`)}
+          className="flex items-center gap-2 flex-1 min-w-0 text-left hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg p-1.5 transition-colors"
+          aria-label={`View ${displayName}'s profile`}
+        >
+          <span className="w-9 h-9 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-600 dark:text-primary-400 font-medium flex-shrink-0">
+            {displayName.charAt(0).toUpperCase()}
+          </span>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100 min-w-0 truncate">
+              {displayName}
+            </h1>
+            {profile?.name && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                @{profile.username}
+              </p>
+            )}
+          </div>
+        </button>
+        {/* Menu button (three dots) */}
+        {!isSelf && !error && (
+          <button
+            type="button"
+            onClick={handleOpenMenu}
+            className="p-1.5 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            aria-label="Conversation options"
+            aria-expanded={isMenuOpen}
+            aria-haspopup="dialog"
+          >
+            <MoreVertical className="w-5 h-5" aria-hidden="true" />
+          </button>
+        )}
       </header>
 
-      <main className="pb-8">
+      {/* Search bar - expands from header bottom with smooth transition */}
+      {!isSelf && !error && (
+        <div
+          className="sticky top-16 z-20 overflow-hidden transition-all duration-300 ease-out"
+          style={{
+            maxHeight: showSearch ? '80px' : '0',
+            opacity: showSearch ? 1 : 0,
+            paddingTop: showSearch ? '0' : '0',
+            paddingBottom: showSearch ? '0' : '0',
+          }}
+        >
+          <div className="max-w-[500px] mx-auto">
+            <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-primary-900/20 rounded-b-xl border border-gray-200 dark:border-primary-800">
+              <Input
+                ref={searchInputRef}
+                focus='none'
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') handleClearSearch();
+                }}
+                placeholder="Search quizzes in this conversation..."
+                className="flex-1 bg-transparent placeholder:text-gray-300 dark:placeholder:text-gray-500"
+                aria-label="Search conversation"
+              />
+              <button
+                type="button"
+                onClick={handleClearSearch}
+                className="p-1 text-gray-500 hover:bg-primary-100 dark:hover:bg-primary-800 rounded-lg transition-colors"
+                aria-label="Close search"
+              >
+                <X className="w-5 h-5" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <main ref={messagesContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto">
         {renderContent()}
       </main>
 
@@ -538,7 +790,7 @@ export function ConvoPage() {
           onContextMenu={onContextMenu}
           onClickCapture={onClickCapture}
           aria-label="Share a quiz"
-          className="fixed bottom-6 right-4 z-30 w-14 h-14 rounded-full bg-primary-500 hover:bg-primary-600 text-white shadow-lg flex items-center justify-center transition-transform active:scale-95"
+          className="fixed bottom-6 right-4 z-30 w-14 h-14 rounded-full border border-white/40 bg-primary-500 hover:bg-primary-600 text-white shadow-lg flex items-center justify-center transition-transform active:scale-95"
         >
           <Share2 className="w-6 h-6" aria-hidden="true" />
         </button>
@@ -582,6 +834,130 @@ export function ConvoPage() {
         error={deleteError}
         onConfirm={handleDeleteConfirm}
         onCancel={handleDeleteCancel}
+      />
+
+      {/* Conversation Menu Slide Panel */}
+      <SlidePanel
+        isOpen={isMenuOpen}
+        onClose={handleCloseMenu}
+        title="Conversation Options"
+        width="w-full sm:w-[360px] lg:w-[400px]"
+      >
+        <div className="px-4 py-2 space-y-1">
+          {/* Search Conversation */}
+          <button
+            type="button"
+            onClick={handleSearchConversation}
+            className="w-full flex items-center gap-3 px-3 py-3 text-left rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          >
+            <div className="w-10 h-10 rounded-lg bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center flex-shrink-0">
+              <Search className="w-5 h-5 text-primary-600 dark:text-primary-400" aria-hidden="true" />
+            </div>
+            <span className="font-medium text-gray-900 dark:text-gray-100">Search conversation</span>
+          </button>
+
+          {/* Add/Edit Nickname */}
+          {!isEditingNickname ? (
+            <button
+              type="button"
+              onClick={handleSetNickname}
+              className="w-full flex items-center gap-3 px-3 py-3 text-left rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            >
+              <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                <Edit className="w-5 h-5 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+              </div>
+              <span className="font-medium text-gray-900 dark:text-gray-100">
+                {nickname ? 'Edit nickname' : 'Add nickname'}
+              </span>
+            </button>
+          ) : (
+            <div className="space-y-3">
+              <Input
+                value={nicknameInput}
+                onChange={(e) => setNicknameInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSaveNickname();
+                  if (e.key === 'Escape') handleCancelNickname();
+                }}
+                placeholder="Enter nickname"
+                autoFocus
+                className="w-full"
+                aria-label="Conversation nickname"
+              />
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  className="flex-1"
+                  onClick={handleCancelNickname}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={handleSaveNickname}
+                  disabled={!nicknameInput.trim() && !nickname}
+                >
+                  {nickname ? 'Save' : 'Add'}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Delete Conversation */}
+          <button
+            type="button"
+            onClick={handleDeleteConvo}
+            className="w-full flex items-center gap-3 px-3 py-3 text-left rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          >
+            <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+              <Trash2 className="w-5 h-5 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+            </div>
+            <span className="font-medium text-gray-900 dark:text-gray-100">Delete conversation</span>
+          </button>
+
+          {/* Divider before Unfriend */}
+          <div className="h-px bg-gray-200 dark:bg-gray-700 my-2" aria-hidden="true" />
+
+          {/* Unfriend */}
+          <button
+            type="button"
+            onClick={handleUnfriend}
+            className="w-full flex items-center gap-3 px-3 py-3 text-left rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-red-600 dark:text-red-400"
+          >
+            <div className="w-10 h-10 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0">
+              <UserX className="w-5 h-5 text-red-600 dark:text-red-400" aria-hidden="true" />
+            </div>
+            <span className="font-medium text-red-600 dark:text-red-400">Unfriend</span>
+          </button>
+        </div>
+      </SlidePanel>
+
+      {/* Delete Conversation Confirmation */}
+      <ConfirmDialog
+        isOpen={isDeleteConvoConfirmOpen}
+        title="Delete conversation?"
+        message="This will remove all shared quizzes from your conversation. The other participant will still see them."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        destructive
+        isLoading={isDeleteConvoLoading}
+        error={deleteConvoError}
+        onConfirm={handleDeleteConvoConfirm}
+        onCancel={handleDeleteConvoCancel}
+      />
+
+      {/* Unfriend Confirmation */}
+      <ConfirmDialog
+        isOpen={isUnfriendConfirmOpen}
+        title="Unfriend?"
+        message="All conversation will be removed (for you). You will no longer be friends with this person."
+        confirmLabel="Unfriend"
+        cancelLabel="Cancel"
+        destructive
+        isLoading={isUnfriendLoading}
+        error={unfriendError}
+        onConfirm={handleUnfriendConfirm}
+        onCancel={handleUnfriendCancel}
       />
     </div>
   );
