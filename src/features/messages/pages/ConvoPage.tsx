@@ -705,7 +705,7 @@ export function ConvoPage() {
           className="flex items-center gap-2 flex-1 min-w-0 text-left hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg p-1.5 transition-colors"
           aria-label={`View ${displayName}'s profile`}
         >
-          <span className="w-9 h-9 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-600 dark:text-primary-400 font-medium flex-shrink-0">
+          <span className="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-600 dark:text-primary-400 font-medium flex-shrink-0">
             {displayName.charAt(0).toUpperCase()}
           </span>
           <div className="flex-1 min-w-0">
@@ -850,8 +850,8 @@ export function ConvoPage() {
             onClick={handleSearchConversation}
             className="w-full flex items-center gap-3 px-3 py-3 text-left rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
           >
-            <div className="w-10 h-10 rounded-lg bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center flex-shrink-0">
-              <Search className="w-5 h-5 text-primary-600 dark:text-primary-400" aria-hidden="true" />
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0">
+              <Search className="w-5 h-5 text-gray-900 dark:text-gray-100" aria-hidden="true" />
             </div>
             <span className="font-medium text-gray-900 dark:text-gray-100">Search conversation</span>
           </button>
@@ -863,8 +863,8 @@ export function ConvoPage() {
               onClick={handleSetNickname}
               className="w-full flex items-center gap-3 px-3 py-3 text-left rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             >
-              <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
-                <Edit className="w-5 h-5 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0">
+                <Edit className="w-5 h-5 text-gray-900 dark:text-gray-100" aria-hidden="true" />
               </div>
               <span className="font-medium text-gray-900 dark:text-gray-100">
                 {nickname ? 'Edit nickname' : 'Add nickname'}
@@ -909,8 +909,8 @@ export function ConvoPage() {
             onClick={handleDeleteConvo}
             className="w-full flex items-center gap-3 px-3 py-3 text-left rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
           >
-            <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
-              <Trash2 className="w-5 h-5 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0">
+              <Trash2 className="w-5 h-5 text-gray-900 dark:text-gray-100" aria-hidden="true" />
             </div>
             <span className="font-medium text-gray-900 dark:text-gray-100">Delete conversation</span>
           </button>

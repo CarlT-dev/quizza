@@ -82,7 +82,7 @@ export function ProfileHeader({
   return (
     <div className="relative overflow-hidden border-b-2 border-gray-300/40 dark:border-none mb-4">
       {/* Gradient background overlay - transparent base */}
-      <div className="absolute inset-0 bg-gradient-to-b from-primary-100/60 via-primary-50/30 to-white/60 dark:from-primary-100/60 dark:via-primary-300/20 dark:to-primary-900/20" aria-hidden="true" />
+      <div className="absolute inset-0 bg-gradient-to-b from-primary-200 via-primary-50/30 to-white/60 dark:from-primary-100/60 dark:via-primary-300/20 dark:to-primary-900/20" aria-hidden="true" />
 
       {/* Header overlay: back button + title positioned over the gradient background */}
       {onBack && (
