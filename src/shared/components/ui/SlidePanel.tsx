@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { X } from 'lucide-react';
 import { Button } from './Button';
+import { useBackButtonHandler } from '@/shared/hooks/useBackButtonHandler';
 
 interface SlidePanelProps {
   /** Whether the panel is open */
@@ -46,6 +47,9 @@ export function SlidePanel({
   const panelRef = useRef<HTMLDivElement>(null);
   const previousActiveElement = useRef<HTMLElement | null>(null);
   const [phase, setPhase] = useState<AnimationPhase>('closed');
+
+  // Register with back button handler (priority 3 = slide panels)
+  useBackButtonHandler(3, onClose, isOpen);
 
   // Handle escape key
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
