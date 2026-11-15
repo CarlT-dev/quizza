@@ -517,209 +517,209 @@ export function CreateQuizPage() {
 
   return (
     <div className="flex-1 bg-primary-50/30 dark:bg-gradient-to-b dark:from-[#071a3a] dark:to-[#040d24] min-h-screen">
-  {/* Floating rounded header with wave decoration */}
-  <header className="sticky top-3 z-10 mx-4 max-w-[500px] sm:mx-auto overflow-hidden rounded-3xl bg-gradient-to-br from-[#1f6bff] to-[#0b4fe0] px-4 py-5 shadow-lg">
-    <svg
-      className="absolute inset-0 w-full h-full pointer-events-none"
-      viewBox="0 0 500 100"
-      preserveAspectRatio="none"
-      aria-hidden="true"
-    >
-      <path d="M300 0 C380 10 420 60 500 40 L500 0 Z" fill="white" fillOpacity="0.10" />
-      <path d="M380 100 C420 70 460 60 500 30 L500 100 Z" fill="black" fillOpacity="0.12" />
-    </svg>
+      {/* Floating rounded header with wave decoration */}
+      <header className="sticky top-3 z-10 mx-4 max-w-[500px] sm:mx-auto overflow-hidden rounded-3xl bg-gradient-to-br from-[#1f6bff] to-[#0b4fe0] px-4 py-5 shadow-lg">
+        <svg
+          className="absolute inset-0 w-full h-full pointer-events-none"
+          viewBox="0 0 500 100"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <path d="M300 0 C380 10 420 60 500 40 L500 0 Z" fill="white" fillOpacity="0.10" />
+          <path d="M380 100 C420 70 460 60 500 30 L500 100 Z" fill="black" fillOpacity="0.12" />
+        </svg>
 
-    <div className="relative flex items-center gap-4">
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        onClick={handleBack}
-        className="p-2 text-white hover:bg-white/20"
-        aria-label="Back to home"
-      >
-        <ChevronLeft className="w-7 h-7" aria-hidden="true" />
-      </Button>
-      <div>
-        <h1 className="text-3xl font-bold leading-tight text-white">Quizza</h1>
-        <p className="text-white/80 text-lg">Create Quiz</p>
-      </div>
-    </div>
-  </header>
-
-  <main className="max-w-[500px] mx-auto px-4 pt-4 pb-20 space-y-3">
-    {/* Import File */}
-    <section className={cardClass}>
-      <SectionTitle
-        icon={<Folder className="w-6 h-6 fill-current" />}
-        title="Import File"
-        right={<Info className="w-6 h-6" strokeWidth={1.5} aria-label="File import info" />}
-      />
-
-      <div
-        className="relative rounded-2xl border-2 border-dashed border-primary-400 dark:border-primary-500 bg-primary-50 dark:bg-transparent p-8 text-center cursor-pointer hover:border-primary-300 transition-colors"
-        onClick={handleFileClick}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            handleFileClick();
-          }
-        }}
-        aria-label="Tap to upload quiz file"
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".docx,.pdf,.pptx"
-          multiple
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-          onChange={handleFileChange}
-          aria-label="Upload quiz file (DOCX, PDF, or PPTX)"
-        />
-
-        <div className="space-y-2">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary-500 text-white shadow-[0_0_20px_rgba(37,99,235,0.45)]">
-            <Upload className="w-8 h-8" aria-hidden="true" />
-          </div>
-          <p className="text-lg font-bold text-primary-600 dark:text-white">Tap to upload</p>
-          <p className="text-xs text-gray-500 dark:text-slate-400 leading-relaxed">
-            Supports: DOCX, PDF, PPTX • Select several*
-            <br />
-            30,000-character combined limit
-          </p>
-        </div>
-      </div>
-    </section>
-
-    {/* Attachment rows (unchanged logic) */}
-    {attachments.map((attachment) => (
-      <div
-        key={attachment.id}
-        className="p-3 bg-primary-50 dark:bg-[#0b1a3a]/80 border border-primary-200 dark:border-[#1f3358] rounded-2xl"
-      >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 min-w-0">
-            <FileText className="w-5 h-5 text-primary-500 flex-shrink-0" aria-hidden="true" />
-            <span className="text-sm font-medium text-primary-700 dark:text-primary-300 truncate max-w-[250px]">
-              {attachment.name}
-            </span>
-          </div>
-          <button
+        <div className="relative flex items-center gap-4">
+          <Button
             type="button"
-            onClick={() => handleRemoveAttachment(attachment.id)}
-            className="text-primary-500 hover:text-primary-700 text-sm font-medium flex-shrink-0 ml-2"
+            variant="ghost"
+            size="sm"
+            onClick={handleBack}
+            className="p-2 text-white hover:bg-white/20"
+            aria-label="Back to home"
           >
-            Remove
-          </button>
+            <ChevronLeft className="w-7 h-7" aria-hidden="true" />
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold leading-tight text-white">Quizza</h1>
+            <p className="text-white/80 text-lg">Create Quiz</p>
+          </div>
         </div>
+      </header>
 
-        {attachment.status === 'extracting' && (
-          <>
-            <div className="mt-2 w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-1">
-              <div
-                className="h-full bg-gradient-to-r from-primary-500 to-primary-400 rounded-full progress-shimmer animate-progress"
-                style={{ width: `${attachment.progress}%` }}
-                role="progressbar"
-                aria-valuenow={attachment.progress}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-label={`Extracting text from ${attachment.name}`}
-              />
-            </div>
-            <p className="mt-1 ml-2 text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
-              <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />
-              Reading document…
-            </p>
-          </>
-        )}
-        {attachment.status === 'done' && attachment.originalLength !== undefined && (
-          <p className="mt-1 ml-2 text-xs text-gray-500 dark:text-gray-400">
-            Extracted {attachment.originalLength.toLocaleString()} characters.
-          </p>
-        )}
-        {(attachment.status === 'failed' || attachment.status === 'rejected') && (
-          <p className="mt-1 ml-2 text-xs text-amber-600 dark:text-amber-400">
-            {attachment.error}
-            {attachment.status === 'failed' && ' Generating from the topic only.'}
-          </p>
-        )}
-      </div>
-    ))}
-
-    {/* Question Type */}
-    <section className={cardClass}>
-      <SectionTitle
-        icon={<CircleHelp className="w-6 h-6" />}
-        title="Question Type"
-        right={
-          <SelectAllButton
-            label="Select all question types"
-            isAllSelected={areAllQuestionTypesSelected}
-            onToggle={toggleAllQuestionTypes}
+      <main className="max-w-[500px] mx-auto px-4 pt-4 pb-20 space-y-3">
+        {/* Import File */}
+        <section className={cardClass}>
+          <SectionTitle
+            icon={<Folder className="w-6 h-6 fill-current" />}
+            title="Import File"
+            right={<Info className="w-6 h-6" strokeWidth={1.5} aria-label="File import info" />}
           />
-        }
-      />
-      <div className="grid grid-cols-2 gap-3">
-        <ChipButton text="Multiple Choice" isActive={isSingleActive}
-          onToggle={() => setIsSingleActive((v) => !v)} />
-        <ChipButton text="True/False" isActive={isMultipleActive}
-          onToggle={() => setIsMultipleActive((v) => !v)} />
-        <ChipButton text="Identification" isActive={isIdentificationActive}
-          onToggle={() => setIsIdentificationActive((v) => !v)} />
-        <ChipButton text="Enumeration" isActive={isEnumerationActive}
-          onToggle={() => setIsEnumerationActive((v) => !v)} />
-      </div>
-    </section>
 
-    {/* Difficulty */}
-    <section className={cardClass}>
-      <SectionTitle
-        icon={<ChartColumn className="w-6 h-6" />}
-        title="Difficulty"
-        right={
-          <SelectAllButton
-            label="Select all difficulties"
-            isAllSelected={areAllDifficultiesSelected}
-            onToggle={toggleAllDifficulties}
-          />
-        }
-      />
-      <div className="flex gap-2">
-        <ChipButton className="flex-1 !pl-4 !pr-2" text="Easy" isActive={isEasyActive}
-          onToggle={() => setIsEasyActive((v) => !v)} />
-        <ChipButton className="flex-1 !pl-4 !pr-2" text="Average" isActive={isMediumActive}
-          onToggle={() => setIsMediumActive((v) => !v)} />
-        <ChipButton className="flex-1 !pl-4 !pr-2" text="Difficult" isActive={isHardActive}
-          onToggle={() => setIsHardActive((v) => !v)} />
-      </div>
-    </section>
-
-    {/* Number of Items */}
-    <section className={cardClass}>
-      <SectionTitle icon={<List className="w-6 h-6" />} title="Number of Items" />
-      <div className="flex gap-3">
-        {[10, 15, 20, 30].map((value) => (
-          <button
-            key={value}
-            type="button"
-            onClick={() => setItemCount(itemCount === value ? null : value)}
-            aria-pressed={itemCount === value}
-            className={`
-              flex-1 h-12 rounded-full border-2 text-sm font-medium transition-all duration-200
-              focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500
-              ${itemCount === value
-                ? 'bg-primary-500 border-primary-500 text-white font-bold shadow-[0_0_16px_rgba(37,99,235,0.35)]'
-                : 'bg-transparent border-slate-300 dark:border-slate-400/50 text-gray-700 dark:text-white hover:border-primary-400'
+          <div
+            className="relative rounded-2xl border-2 border-dashed border-primary-400 dark:border-primary-500 bg-primary-50 dark:bg-transparent p-8 text-center cursor-pointer hover:border-primary-300 transition-colors"
+            onClick={handleFileClick}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleFileClick();
               }
-            `}
+            }}
+            aria-label="Tap to upload quiz file"
           >
-            {value}
-          </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".docx,.pdf,.pptx"
+              multiple
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              onChange={handleFileChange}
+              aria-label="Upload quiz file (DOCX, PDF, or PPTX)"
+            />
+
+            <div className="space-y-2">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary-500 text-white shadow-[0_0_20px_rgba(37,99,235,0.45)]">
+                <Upload className="w-8 h-8" aria-hidden="true" />
+              </div>
+              <p className="text-lg font-bold text-primary-600 dark:text-white">Tap to upload</p>
+              <p className="text-xs text-gray-500 dark:text-slate-400 leading-relaxed">
+                Supports: DOCX, PDF, PPTX • Select several*
+                <br />
+                30,000-character combined limit
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* Attachment rows (unchanged logic) */}
+        {attachments.map((attachment) => (
+          <div
+            key={attachment.id}
+            className="p-3 bg-primary-50 dark:bg-[#0b1a3a]/80 border border-primary-200 dark:border-[#1f3358] rounded-2xl"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 min-w-0">
+                <FileText className="w-5 h-5 text-primary-500 flex-shrink-0" aria-hidden="true" />
+                <span className="text-sm font-medium text-primary-700 dark:text-primary-300 truncate max-w-[250px]">
+                  {attachment.name}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleRemoveAttachment(attachment.id)}
+                className="text-primary-500 hover:text-primary-700 text-sm font-medium flex-shrink-0 ml-2"
+              >
+                Remove
+              </button>
+            </div>
+
+            {attachment.status === 'extracting' && (
+              <>
+                <div className="mt-2 w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-1">
+                  <div
+                    className="h-full bg-gradient-to-r from-primary-500 to-primary-400 rounded-full progress-shimmer animate-progress"
+                    style={{ width: `${attachment.progress}%` }}
+                    role="progressbar"
+                    aria-valuenow={attachment.progress}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label={`Extracting text from ${attachment.name}`}
+                  />
+                </div>
+                <p className="mt-1 ml-2 text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                  <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />
+                  Reading document…
+                </p>
+              </>
+            )}
+            {attachment.status === 'done' && attachment.originalLength !== undefined && (
+              <p className="mt-1 ml-2 text-xs text-gray-500 dark:text-gray-400">
+                Extracted {attachment.originalLength.toLocaleString()} characters.
+              </p>
+            )}
+            {(attachment.status === 'failed' || attachment.status === 'rejected') && (
+              <p className="mt-1 ml-2 text-xs text-amber-600 dark:text-amber-400">
+                {attachment.error}
+                {attachment.status === 'failed' && ' Generating from the topic only.'}
+              </p>
+            )}
+          </div>
         ))}
-      </div>
-    </section>
+
+        {/* Question Type */}
+        <section className={cardClass}>
+          <SectionTitle
+            icon={<CircleHelp className="w-6 h-6" />}
+            title="Question Type"
+            right={
+              <SelectAllButton
+                label="Select all question types"
+                isAllSelected={areAllQuestionTypesSelected}
+                onToggle={toggleAllQuestionTypes}
+              />
+            }
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <ChipButton text="Multiple Choice" isActive={isSingleActive}
+              onToggle={() => setIsSingleActive((v) => !v)} />
+            <ChipButton text="True/False" isActive={isMultipleActive}
+              onToggle={() => setIsMultipleActive((v) => !v)} />
+            <ChipButton text="Identification" isActive={isIdentificationActive}
+              onToggle={() => setIsIdentificationActive((v) => !v)} />
+            <ChipButton text="Enumeration" isActive={isEnumerationActive}
+              onToggle={() => setIsEnumerationActive((v) => !v)} />
+          </div>
+        </section>
+
+        {/* Difficulty */}
+        <section className={cardClass}>
+          <SectionTitle
+            icon={<ChartColumn className="w-6 h-6" />}
+            title="Difficulty"
+            right={
+              <SelectAllButton
+                label="Select all difficulties"
+                isAllSelected={areAllDifficultiesSelected}
+                onToggle={toggleAllDifficulties}
+              />
+            }
+          />
+          <div className="flex gap-2">
+            <ChipButton className="flex-1 !pl-4 !pr-2" text="Easy" isActive={isEasyActive}
+              onToggle={() => setIsEasyActive((v) => !v)} />
+            <ChipButton className="flex-1 !pl-4 !pr-2" text="Average" isActive={isMediumActive}
+              onToggle={() => setIsMediumActive((v) => !v)} />
+            <ChipButton className="flex-1 !pl-4 !pr-2" text="Difficult" isActive={isHardActive}
+              onToggle={() => setIsHardActive((v) => !v)} />
+          </div>
+        </section>
+
+        {/* Number of Items */}
+        <section className={cardClass}>
+          <SectionTitle icon={<List className="w-6 h-6" />} title="Number of Items" />
+          <div className="flex gap-3">
+            {[10, 15, 20, 30].map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setItemCount(itemCount === value ? null : value)}
+                aria-pressed={itemCount === value}
+                className={`
+                  flex-1 h-12 rounded-full border-2 text-sm font-medium transition-all duration-200
+                  focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500
+                  ${itemCount === value
+                    ? 'bg-primary-500 border-primary-500 text-white font-bold shadow-[0_0_16px_rgba(37,99,235,0.35)]'
+                    : 'bg-transparent border-slate-300 dark:border-slate-400/50 text-gray-700 dark:text-white hover:border-primary-400'
+                  }
+                `}
+              >
+                {value}
+              </button>
+            ))}
+          </div>
+        </section>
 
         {/* Error Display */}
         {error && (
