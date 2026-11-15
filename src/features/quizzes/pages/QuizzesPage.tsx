@@ -228,7 +228,7 @@ export function QuizzesPage() {
 
   const renderHeader = () => (
     <header className="flex items-center justify-between px-4 py-3 mb-4 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-      <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100 flex-1 min-w-0 truncate">
+      <h1 className="text-xl font-semibold text-primary-900 dark:text-gray-100 flex-1 min-w-0 truncate">
         My Quizzes
       </h1>
       <div className="flex items-center shrink-0">

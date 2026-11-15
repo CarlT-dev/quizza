@@ -537,13 +537,13 @@ export function CreateQuizPage() {
       {/* Content area */}
       <main className="pt-1 pb-20 px-4 mt-2">
         {/* Import File Card - Dashed border */}
-        <Card className='mt-4 border border-primary-300'>
+        <Card className='mt-4 border border-primary-300 dark:bg-[#0c274f]'>
             <CardTitle className='mb-6 text-text-primary'>
               Import File
             </CardTitle>
               <div className="max-w-[500px] mx-auto">
             <div
-              className="relative rounded-2xl border-2 border-dashed border-primary-300 dark:border-primary-700 bg-primary-50 dark:bg-gray-800/50 p-8 text-center cursor-pointer hover:border-primary-400 dark:hover:border-primary-600 transition-colors"
+              className="relative rounded-2xl border-2 border-dashed border-primary-300 dark:border-primary-700 bg-primary-50 dark:bg-[#0c274f] p-8 text-center cursor-pointer hover:border-primary-400 dark:hover:border-primary-600 transition-colors"
               onClick={handleFileClick}
               role="button"
               tabIndex={0}

@@ -50,7 +50,7 @@ export const UnfinishedQuizCard = memo(function UnfinishedQuizCard({
       </span>
 
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-bold text-gray-900 dark:text-gray-100 line-clamp-1">
+        <p className="text-sm font-bold text-gray-900 dark:text-gray-200 line-clamp-1">
           {quiz.title}
         </p>
         {/* QuizCard's exact default track/fill literals (Tailwind v4 needs

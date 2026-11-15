@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from './Button';
 import { AlertTriangle, Loader2 } from 'lucide-react';
+import { useBackButtonHandler } from '@/shared/hooks/useBackButtonHandler';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -30,6 +31,9 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   onCancel
 }) => {
   const [phase, setPhase] = useState<AnimationPhase>('closed');
+
+  // Register with back button handler (priority 1 = highest for dialogs)
+  useBackButtonHandler(1, onCancel, isOpen);
 
   // Sync internal phase with isOpen prop
   useEffect(() => {

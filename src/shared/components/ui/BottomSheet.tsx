@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { Button } from './Button';
+import { useBackButtonHandler } from '@/shared/hooks/useBackButtonHandler';
 
 interface BottomSheetProps {
   /** Whether the panel is open */
@@ -49,6 +50,9 @@ export function BottomSheet({
   const panelRef = useRef<HTMLDivElement>(null);
   const previousActiveElement = useRef<HTMLElement | null>(null);
   const [phase, setPhase] = useState<AnimationPhase>('closed');
+
+  // Register with back button handler (priority 2 = bottom sheets)
+  useBackButtonHandler(2, onClose, isOpen);
 
   // Sync internal phase with isOpen prop. The timers only advance the phase
   // (opening→open, closing→closed), so re-running on `phase` is unnecessary —

@@ -39,7 +39,7 @@ export function CreatedQuizzes({ quizzes }: CreatedQuizzesProps) {
               key={quiz.id}
               type="button"
               onClick={() => navigate(`/quiz/${quizId}`)}
-              className="group w-full flex items-center gap-4 p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700 hover:bg-primary-50/50 dark:hover:bg-primary-900/10 transition-all duration-200"
+              className="group w-full flex items-center gap-4 p-4 bg-white dark:bg-gray-900 border-y border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700 hover:bg-primary-50/50 dark:hover:bg-primary-900/10 transition-all duration-200"
             >
               {/* Quiz icon / color indicator */}
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white flex-shrink-0 group-hover:scale-105 transition-transform">
@@ -48,7 +48,7 @@ export function CreatedQuizzes({ quizzes }: CreatedQuizzesProps) {
 
               {/* Quiz info */}
               <div className="flex-1 min-w-0 text-left">
-                <span className="flex items-center gap-1">
+                <span className="flex items-center gap-1 dark:text-gray-100">
                     {quiz.title}
                   </span>
                 <div className="mt-1 flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
