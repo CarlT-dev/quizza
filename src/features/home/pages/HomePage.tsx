@@ -167,7 +167,7 @@ export function HomePage() {
                 aria-label="User menu"
                 aria-expanded={userMenuOpen}
               >
-                <div className="w-10 h-10 border border-primary-50/80 rounded-full bg-primary-500 flex items-center justify-center text-white font-medium text-base">
+                <div className="w-10 h-10 border border-primary-50/80 dark:border-primary-400 rounded-full bg-primary-500 flex items-center justify-center text-white font-medium text-base">
                   {userInitial}
                 </div>
               </Button>
@@ -188,7 +188,7 @@ export function HomePage() {
                     variant="secondary"
                     size="md"
                     radius="rounded"
-                    className="sm:w-auto bg-white text-primary-500 hover:bg-primary-50 dark:bg-primary-100 dark:text-primary dark:border dark:border-white dark:hover:bg-primary-100"
+                    className="sm:w-auto bg-white text-primary-500 hover:bg-primary-50 dark:bg-primary-100 dark:text-primary dark:border dark:border-primary-50 dark:hover:bg-primary-100"
                     onClick={handleCreateQuiz}
                   >
                     Create Quiz

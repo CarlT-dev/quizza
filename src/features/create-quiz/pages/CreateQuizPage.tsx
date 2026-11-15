@@ -1,7 +1,8 @@
 import { useRef, useState, useEffect, useReducer } from 'react';
 import { flushSync } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Upload, X, Loader2, AlertCircle, FileText, CopyCheck } from 'lucide-react';
+import { ChevronLeft, Upload, X, Loader2, AlertCircle, FileText, CopyCheck,
+  Folder, CircleHelp, ChartColumn, List, Info, Check, } from 'lucide-react';
 import { Button } from '@/shared/components/ui';
 import { Card, CardTitle } from '@/shared/components/ui';
 import { Box, BoxTitle, BoxContent } from '@/shared/components/ui/Box';
@@ -37,9 +38,9 @@ type Attachment = {
 // Combined extracted-text budget across accepted attachments (decided in
 // selection order): the file that would push the total past this limit is
 // neglected with an error instead of being silently truncated.
-const MAX_TOTAL_CONTEXT_CHARS = 10_000;
+const MAX_TOTAL_CONTEXT_CHARS = 30_000;
 
-// Every attachment transition is a pure reducer action. The 10,000-char
+// Every attachment transition is a pure reducer action. The 30,000-char
 // budget is DERIVED at decision time (sum of accepted rows), so removing
 // a row mid-flight or uploading a second batch can never desync it from
 // the "total across all accepted files" requirement.
@@ -109,58 +110,61 @@ function attachmentsReducer(state: Attachment[], action: AttachmentAction): Atta
   }
 }
 
-// Local reusable capsule tab component
-function TabButton({
+// Selectable capsule chip: filled + check when selected, outlined + empty circle when not
+function ChipButton({
   text,
   isActive,
-  onActivate,
-  onClose,
-}: { text: string; isActive: boolean; onActivate: () => void; onClose?: () => void }) {
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (!isActive && (e.key === 'Enter' || e.key === ' ')) {
-      e.preventDefault();
-      onActivate();
-    }
-  };
-
+  onToggle,
+  className = '',
+}: { text: string; isActive: boolean; onToggle: () => void; className?: string }) {
   return (
-    <div
-      role="button"
-      tabIndex={isActive ? -1 : 0}
-      onClick={isActive ? undefined : onActivate}
-      onKeyDown={handleKeyDown}
-      className={`
-        group relative inline-flex items-center justify-center pl-3 pr-10 py-1 h-10 rounded-full
-        text-sm font-medium transition-all duration-200 whitespace-nowrap overflow-hidden text-ellipsis
-        border-2 bg-white select-none flex-shrink-0
-        ${isActive
-          ? 'text-primary-600 dark:text-primary-400 border-primary-500 font-semibold cursor-default'
-          : 'text-gray-400 dark:text-gray-500 border-gray-300 dark:border-gray-600 hover:text-primary-400 dark:hover:text-primary-400 hover:border-primary-400'
-        }
-      `}
+    <button
+      type="button"
+      onClick={onToggle}
       aria-pressed={isActive}
-      aria-disabled={isActive}
+      className={`
+        inline-flex items-center justify-between gap-3 h-12 pl-5 pr-3 rounded-full border-2
+        text-sm font-medium whitespace-nowrap select-none transition-all duration-200
+        focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500
+        ${isActive
+          ? 'bg-primary-500 border-primary-500 text-white shadow-[0_0_16px_rgba(37,99,235,0.35)]'
+          : 'bg-transparent border-slate-300 dark:border-slate-400/50 text-gray-700 dark:text-white hover:border-primary-400'
+        }
+        ${className}
+      `}
     >
-      <span className="text-xs truncate">{text}</span>
-      {onClose && (
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); onClose(); }}
-          className={`
-            absolute right-2 top-1/2 -translate-y-1/2 flex-shrink-0 p-1 rounded-full transition-colors
-            ${isActive
-              ? 'bg-primary-500 text-white group-hover:bg-primary-600'
-              : 'bg-gray-200 dark:bg-gray-700 text-gray-400/50 dark:text-gray-400 group-hover:bg-primary-400 group-hover:text-white'
-            }
-          `}
-          aria-label="Remove"
-        >
-          <X className="w-4 h-4" aria-hidden="true" />
-        </button>
-      )}
+      <span className="truncate">{text}</span>
+      <span
+        className={`
+          flex items-center justify-center w-7 h-7 rounded-full flex-shrink-0 transition-colors
+          ${isActive ? 'bg-white text-primary-500' : 'border-2 border-slate-300 dark:border-slate-400/70'}
+        `}
+        aria-hidden="true"
+      >
+        {isActive && <Check className="w-4 h-4" strokeWidth={3} />}
+      </span>
+    </button>
+  );
+}
+
+function SectionTitle({
+  icon,
+  title,
+  right,
+}: { icon: React.ReactNode; title: string; right?: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center gap-3 text-lg font-bold text-text-primary dark:text-white">
+        <span className="text-primary-500" aria-hidden="true">{icon}</span>
+        <h2>{title}</h2>
+      </div>
+      {right && <div className="text-slate-400">{right}</div>}
     </div>
   );
 }
+
+const cardClass =
+  'rounded-2xl border border-primary-200 dark:border-[#1f3358] bg-white dark:bg-[#0b1a3a]/80 p-4 shadow-lg';
 
 // Select-all toggle for section headers (Question Type, Difficulty)
 function SelectAllButton({ label, isAllSelected, onToggle }: {
@@ -512,81 +516,88 @@ export function CreateQuizPage() {
   };
 
   return (
-    <div className="flex-1 bg-primary-50/30 dark:bg-gray-900">
-      {/* Gradient Header with rounded bottom corners - fixed but constrained to layout width */}
-      <header className="inset-x-0 top-0 z-10 max-w-[500px] mx-auto bg-gradient-to-r from-primary-500 to-primary-600 rounded-b-3xl px-4 pb-4">
-        {/* Back button */}
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={handleBack}
-          className="absolute top-6 left-4 p-2 text-white hover:bg-white/20"
-          aria-label="Back to home"
+    <div className="flex-1 bg-primary-50/30 dark:bg-gradient-to-b dark:from-[#071a3a] dark:to-[#040d24] min-h-screen">
+      {/* Floating rounded header with wave decoration */}
+      <header className="sticky top-3 z-10 mx-4 max-w-[500px] sm:mx-auto overflow-hidden rounded-3xl bg-gradient-to-br from-[#1f6bff] to-[#0b4fe0] px-4 py-5 shadow-lg">
+        <svg
+          className="absolute inset-0 w-full h-full pointer-events-none"
+          viewBox="0 0 500 100"
+          preserveAspectRatio="none"
+          aria-hidden="true"
         >
-          <ChevronLeft className="w-7 h-7" aria-hidden="true" />
-        </Button>
+          <path d="M300 0 C380 10 420 60 500 40 L500 0 Z" fill="white" fillOpacity="0.10" />
+          <path d="M380 100 C420 70 460 60 500 30 L500 100 Z" fill="black" fillOpacity="0.12" />
+        </svg>
 
-        {/* Title and subtitle */}
-        <div className="pt-4 ml-15">
-          <h1 className="text-3xl font-bold text-white">Quizza</h1>
-          <p className="mt-0 text-white/80 text-lg">Create Quiz</p>
+        <div className="relative flex items-center gap-4">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleBack}
+            className="p-2 text-white hover:bg-white/20"
+            aria-label="Back to home"
+          >
+            <ChevronLeft className="w-7 h-7" aria-hidden="true" />
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold leading-tight text-white">Quizza</h1>
+            <p className="text-white/80 text-lg">Create Quiz</p>
+          </div>
         </div>
       </header>
 
-      {/* Content area */}
-      <main className="pt-1 pb-20 px-4 mt-2">
-        {/* Import File Card - Dashed border */}
-        <Card className='mt-4 border border-primary-300'>
-            <CardTitle className='mb-6 text-text-primary'>
-              Import File
-            </CardTitle>
-              <div className="max-w-[500px] mx-auto">
-            <div
-              className="relative rounded-2xl border-2 border-dashed border-primary-300 dark:border-primary-700 bg-primary-50 dark:bg-gray-800/50 p-8 text-center cursor-pointer hover:border-primary-400 dark:hover:border-primary-600 transition-colors"
-              onClick={handleFileClick}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  handleFileClick();
-                }
-              }}
-              aria-label="Tap to upload quiz file"
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".docx,.pdf"
-                multiple
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                onChange={handleFileChange}
-                aria-label="Upload quiz file (DOCX or PDF)"
-              />
+      <main className="max-w-[500px] mx-auto px-4 pt-4 pb-20 space-y-3">
+        {/* Import File */}
+        <section className={cardClass}>
+          <SectionTitle
+            icon={<Folder className="w-6 h-6 fill-current" />}
+            title="Import File"
+            right={<Info className="w-6 h-6" strokeWidth={1.5} aria-label="File import info" />}
+          />
 
-              <div className="space-y-1">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-500 dark:text-primary-400">
-                  <Upload className="w-8 h-8" aria-hidden="true" />
-                </div>
+          <div
+            className="relative rounded-2xl border-2 border-dashed border-primary-400 dark:border-primary-500 bg-primary-50 dark:bg-transparent p-8 text-center cursor-pointer hover:border-primary-300 transition-colors"
+            onClick={handleFileClick}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleFileClick();
+              }
+            }}
+            aria-label="Tap to upload quiz file"
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".docx,.pdf,.pptx"
+              multiple
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              onChange={handleFileChange}
+              aria-label="Upload quiz file (DOCX, PDF, or PPTX)"
+            />
 
-                <div>
-                  <p className="text-lg font-medium text-primary-600 dark:text-gray-100">Tap to upload</p>
-                </div>
-
-                <p className="text-xs text-gray-400 dark:text-gray-500">
-                  Supports: DOCX, PDF · select several · 10,000-character combined limit
-                </p>
+            <div className="space-y-2">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary-500 text-white shadow-[0_0_20px_rgba(37,99,235,0.45)]">
+                <Upload className="w-8 h-8" aria-hidden="true" />
               </div>
+              <p className="text-lg font-bold text-primary-600 dark:text-white">Tap to upload</p>
+              <p className="text-xs text-gray-500 dark:text-slate-400 leading-relaxed">
+                Supports: DOCX, PDF, PPTX • Select several*
+                <br />
+                30,000-character combined limit
+              </p>
             </div>
           </div>
-        </Card>
+        </section>
 
-        {/* Attachment rows: one per uploaded file */}
+        {/* Attachment rows (unchanged logic) */}
         {attachments.map((attachment) => (
           <div
             key={attachment.id}
-            className="mt-3 p-3 bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-800 rounded-xl"
+            className="p-3 bg-primary-50 dark:bg-[#0b1a3a]/80 border border-primary-200 dark:border-[#1f3358] rounded-2xl"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 min-w-0">
@@ -637,111 +648,78 @@ export function CreateQuizPage() {
           </div>
         ))}
 
-        <Box className='mt-5 border-primary-300'>
-          <BoxTitle className='flex justify-between text-text-primary'>
-              <span>Question Type</span>
+        {/* Question Type */}
+        <section className={cardClass}>
+          <SectionTitle
+            icon={<CircleHelp className="w-6 h-6" />}
+            title="Question Type"
+            right={
               <SelectAllButton
                 label="Select all question types"
                 isAllSelected={areAllQuestionTypesSelected}
                 onToggle={toggleAllQuestionTypes}
               />
-          </BoxTitle>
-          <BoxContent>
-            <div className="flex gap-2 flex-wrap">
-              <TabButton
-                text="Multiple Choice"
-                isActive={isSingleActive}
-                onActivate={() => setIsSingleActive(true)}
-                onClose={() => setIsSingleActive(false)}
-              />
-              <TabButton
-                text="True/False"
-                isActive={isMultipleActive}
-                onActivate={() => setIsMultipleActive(true)}
-                onClose={() => setIsMultipleActive(false)}
-              />
-              <TabButton
-                text="Identification"
-                isActive={isIdentificationActive}
-                onActivate={() => setIsIdentificationActive(true)}
-                onClose={() => setIsIdentificationActive(false)}
-              />
-              <TabButton
-                text="Enumeration"
-                isActive={isEnumerationActive}
-                onActivate={() => setIsEnumerationActive(true)}
-                onClose={() => setIsEnumerationActive(false)}
-              />
-            </div>
-          </BoxContent>
-        </Box>
+            }
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <ChipButton text="Multiple Choice" isActive={isSingleActive}
+              onToggle={() => setIsSingleActive((v) => !v)} />
+            <ChipButton text="True/False" isActive={isMultipleActive}
+              onToggle={() => setIsMultipleActive((v) => !v)} />
+            <ChipButton text="Identification" isActive={isIdentificationActive}
+              onToggle={() => setIsIdentificationActive((v) => !v)} />
+            <ChipButton text="Enumeration" isActive={isEnumerationActive}
+              onToggle={() => setIsEnumerationActive((v) => !v)} />
+          </div>
+        </section>
 
-        <Box className='border-primary-300 border-t-0'>
-          <BoxTitle className='flex justify-between text-text-primary'>
-              <span>Difficulty</span>
+        {/* Difficulty */}
+        <section className={cardClass}>
+          <SectionTitle
+            icon={<ChartColumn className="w-6 h-6" />}
+            title="Difficulty"
+            right={
               <SelectAllButton
                 label="Select all difficulties"
                 isAllSelected={areAllDifficultiesSelected}
                 onToggle={toggleAllDifficulties}
               />
-          </BoxTitle>
-          <BoxContent>
-            <div className="flex gap-2 flex-wrap">
-              <TabButton
-                text="Easy"
-                isActive={isEasyActive}
-                onActivate={() => setIsEasyActive(true)}
-                onClose={() => setIsEasyActive(false)}
-              />
-              <TabButton
-                text="Average"
-                isActive={isMediumActive}
-                onActivate={() => setIsMediumActive(true)}
-                onClose={() => setIsMediumActive(false)}
-              />
-              <TabButton
-                text="Difficult"
-                isActive={isHardActive}
-                onActivate={() => setIsHardActive(true)}
-                onClose={() => setIsHardActive(false)}
-              />
-            </div>
-          </BoxContent>
-        </Box>
+            }
+          />
+          <div className="flex gap-2">
+            <ChipButton className="flex-1 !pl-4 !pr-2" text="Easy" isActive={isEasyActive}
+              onToggle={() => setIsEasyActive((v) => !v)} />
+            <ChipButton className="flex-1 !pl-4 !pr-2" text="Average" isActive={isMediumActive}
+              onToggle={() => setIsMediumActive((v) => !v)} />
+            <ChipButton className="flex-1 !pl-4 !pr-2" text="Difficult" isActive={isHardActive}
+              onToggle={() => setIsHardActive((v) => !v)} />
+          </div>
+        </section>
 
         {/* Number of Items */}
-        <Box className='border-primary-300 border-t-0'>
-          <BoxTitle className='text-text-primary'>
-              Number of Items
-          </BoxTitle>
-          <BoxContent>
-            <div className="flex gap-2 flex-wrap">
-              {[
-                { value: 10, label: '10' },
-                { value: 15, label: '15' },
-                { value: 20, label: '20' },
-                { value: 30, label: '30' },
-              ].map(({ value, label }) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setItemCount(itemCount === value ? null : value)}
-                  className={`
-                    flex-1 min-w-[60px] max-w-[72px] px-3 py-3 rounded-xl border-2 transition-all duration-200
-                    text-center text-sm font-medium
-                    ${itemCount === value
-                      ? 'bg-primary-50 dark:bg-primary-900/30 border-primary-500 text-primary-600 dark:text-primary-400'
-                      : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-primary-300 dark:hover:border-primary-700'
-                    }
-                  `}
-                  aria-pressed={itemCount === value}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </BoxContent>
-        </Box>
+        <section className={cardClass}>
+          <SectionTitle icon={<List className="w-6 h-6" />} title="Number of Items" />
+          <div className="flex gap-3">
+            {[10, 15, 20, 30].map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setItemCount(itemCount === value ? null : value)}
+                aria-pressed={itemCount === value}
+                className={`
+                  flex-1 h-12 rounded-full border-2 text-sm font-medium transition-all duration-200
+                  focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500
+                  ${itemCount === value
+                    ? 'bg-primary-500 border-primary-500 text-white font-bold shadow-[0_0_16px_rgba(37,99,235,0.35)]'
+                    : 'bg-transparent border-slate-300 dark:border-slate-400/50 text-gray-700 dark:text-white hover:border-primary-400'
+                  }
+                `}
+              >
+                {value}
+              </button>
+            ))}
+          </div>
+        </section>
 
         {/* Error Display */}
         {error && (

@@ -187,17 +187,13 @@ export function ProfilePage() {
                 {/* Bio - centered, static display */}
                 <div className="w-full max-w-xl px-4">
                   <div className="w-full">
-                    {hasBio ? (
+                    {hasBio ?? (
                       <p
                         className="text-sm text-gray-400 dark:text-gray-300 leading-relaxed whitespace-pre-wrap text-center"
                       >
                         {profile.bio}
                       </p>
-                    ) : (
-                      <p className="w-full text-center text-base text-gray-400 dark:text-gray-500 py-4">
-                        No bio yet
-                      </p>
-                    )}
+                   )}
                   </div>
                 </div>
 

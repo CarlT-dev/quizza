@@ -2,15 +2,18 @@ import { PullToRefreshProvider } from '@/features/refresh/context/PullToRefreshC
 import { GlobalPullToRefresh } from '@/features/refresh/components/GlobalPullToRefresh';
 import { AppRoutes } from '@/app/routes';
 import { AuthProvider } from '@/features/auth/context/AuthContext';
+import { BackButtonProvider } from '@/shared/context/BackButtonContext';
 
 function App() {
   return (
     <AuthProvider>
-      <PullToRefreshProvider>
-        <GlobalPullToRefresh>
-          <AppRoutes />
-        </GlobalPullToRefresh>
-      </PullToRefreshProvider>
+      <BackButtonProvider>
+        <PullToRefreshProvider>
+          <GlobalPullToRefresh>
+            <AppRoutes />
+          </GlobalPullToRefresh>
+        </PullToRefreshProvider>
+      </BackButtonProvider>
     </AuthProvider>
   );
 }
