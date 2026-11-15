@@ -13,6 +13,7 @@ import { QuizPage, ScorePage, ResultPage, OwnerResultsPage, OwnerResultDetailPag
 import { ProfilePage as CurrentUserProfilePage } from '@/features/profile';
 import { ProfilePage as ViewProfilePage } from '@/features/users';
 import { MessagesPage, ConvoPage } from '@/features/messages';
+import { BackButtonListener } from '@/shared/components/BackButtonListener';
 
 export function AppRoutes() {
   return (
@@ -40,6 +41,7 @@ export function AppRoutes() {
         </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
+      <BackButtonListener />
     </BrowserRouter>
   );
 }
