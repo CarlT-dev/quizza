@@ -123,8 +123,8 @@ function ChipButton({
       onClick={onToggle}
       aria-pressed={isActive}
       className={`
-        inline-flex items-center justify-between gap-3 h-12 pl-5 pr-3 rounded-full border-2
-        text-sm font-medium whitespace-nowrap select-none transition-all duration-200
+        inline-flex items-center justify-between gap-1.5 h-10 pl-3 pr-1 rounded-full border-2
+        text-xs font-medium whitespace-nowrap select-none transition-all duration-200
         focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500
         ${isActive
           ? 'bg-primary-500 border-primary-500 text-white shadow-[0_0_16px_rgba(37,99,235,0.35)]'
@@ -133,10 +133,10 @@ function ChipButton({
         ${className}
       `}
     >
-      <span className="truncate">{text}</span>
+      <span>{text}</span>
       <span
         className={`
-          flex items-center justify-center w-7 h-7 rounded-full flex-shrink-0 transition-colors
+          flex items-center justify-center mr-1 w-5 h-5 rounded-full flex-shrink-0 transition-colors
           ${isActive ? 'bg-white text-primary-500' : 'border-2 border-slate-300 dark:border-slate-400/70'}
         `}
         aria-hidden="true"
@@ -686,12 +686,12 @@ export function CreateQuizPage() {
               />
             }
           />
-          <div className="flex gap-2">
-            <ChipButton className="flex-1 !pl-4 !pr-2" text="Easy" isActive={isEasyActive}
+          <div className="flex flex-wrap gap-2">
+            <ChipButton className="flex-1 min-w-[90px]" text="Easy" isActive={isEasyActive}
               onToggle={() => setIsEasyActive((v) => !v)} />
-            <ChipButton className="flex-1 !pl-4 !pr-2" text="Average" isActive={isMediumActive}
+            <ChipButton className="flex-1 min-w-[90px]" text="Average" isActive={isMediumActive}
               onToggle={() => setIsMediumActive((v) => !v)} />
-            <ChipButton className="flex-1 !pl-4 !pr-2" text="Difficult" isActive={isHardActive}
+            <ChipButton className="flex-1 min-w-[90px]" text="Difficult" isActive={isHardActive}
               onToggle={() => setIsHardActive((v) => !v)} />
           </div>
         </section>
