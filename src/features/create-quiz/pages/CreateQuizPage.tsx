@@ -38,9 +38,9 @@ type Attachment = {
 // Combined extracted-text budget across accepted attachments (decided in
 // selection order): the file that would push the total past this limit is
 // neglected with an error instead of being silently truncated.
-const MAX_TOTAL_CONTEXT_CHARS = 30_000;
+const MAX_TOTAL_CONTEXT_CHARS = 100_000;
 
-// Every attachment transition is a pure reducer action. The 30,000-char
+// Every attachment transition is a pure reducer action. The 100,000-char
 // budget is DERIVED at decision time (sum of accepted rows), so removing
 // a row mid-flight or uploading a second batch can never desync it from
 // the "total across all accepted files" requirement.
@@ -50,6 +50,10 @@ const MAX_TOTAL_CONTEXT_CHARS = 30_000;
 // so anything it closes over must be initialized before the component body
 // runs — a later-declared const in the component was a temporal-dead-zone
 // crash the moment files finished extracting.
+//
+// The 100,000-char budget is DERIVED at decision time (sum of accepted rows),
+// so removing a row mid-flight or uploading a second batch can never desync it
+// from the "total across all accepted files" requirement.
 type AttachmentAction =
   | { type: 'add-batch'; batch: Attachment[] }
   | { type: 'progress'; id: string; progress: number }
@@ -469,8 +473,8 @@ export function CreateQuizPage() {
   // Accepted documents as generation context, joined in attachment order.
   // A document under ~200 chars, failed, rejected, or still extracting is
   // skipped; with nothing left, generation falls back to topic-only. (The
-  // combined text can never reach the extractor's 30,000-char cap under the
-  // 10,000-char total limit, so no truncation note is needed here.)
+  // combined text can never reach the extractor's 100,000-char cap under the
+  // 100,000-char total limit, so no truncation note is needed here.)
   const buildAdditionalContext = (): string | undefined => {
     const done = attachments.filter(
       (a): a is Attachment & { text: string } =>
@@ -587,7 +591,7 @@ export function CreateQuizPage() {
               <p className="text-xs text-gray-500 dark:text-slate-400 leading-relaxed">
                 Supports: DOCX, PDF, PPTX • Select several*
                 <br />
-                30,000-character combined limit
+                100,000-character combined limit
               </p>
             </div>
           </div>
