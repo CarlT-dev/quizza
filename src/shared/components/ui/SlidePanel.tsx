@@ -48,20 +48,26 @@ export function SlidePanel({
   const previousActiveElement = useRef<HTMLElement | null>(null);
   const [phase, setPhase] = useState<AnimationPhase>('closed');
 
+  // Use a ref for onClose so handlers don't need to be recreated when onClose changes
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
   // Register with back button handler (priority 3 = slide panels)
   useBackButtonHandler(3, onClose, isOpen);
 
-  // Handle escape key
+  // Handle escape key - stable because it uses the ref
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     if (event.key === 'Escape') {
-      onClose();
+      onCloseRef.current();
     }
-  }, [onClose]);
+  }, []);
 
-  // Handle outside click (on backdrop)
+  // Handle outside click (on backdrop) - stable because it uses the ref
   const handleBackdropClick = useCallback(() => {
-    onClose();
-  }, [onClose]);
+    onCloseRef.current();
+  }, []);
 
   // Sync internal phase with isOpen prop
   useEffect(() => {
@@ -76,7 +82,7 @@ export function SlidePanel({
     }
   }, [isOpen, phase]);
 
-  // Focus management and body scroll lock
+  // Focus management and body scroll lock - only depends on phase
   useEffect(() => {
     if (phase === 'opening' || phase === 'open') {
       // Store previously focused element

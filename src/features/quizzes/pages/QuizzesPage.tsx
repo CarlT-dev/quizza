@@ -412,12 +412,22 @@ export function QuizzesPage() {
       {renderHeader()}
 
       {/* Content */}
-      <main className="pb-20">
+      <main className="pb-28">
         {renderContent()}
       </main>
 
       {/* Share flow: friends picker for the quiz targeted from a card's ⋯ menu */}
       <ShareQuizSheet quiz={shareQuiz} onClose={() => setShareQuiz(null)} />
+
+      {/* Floating action button to create a new quiz */}
+      <button
+        type="button"
+        onClick={handleCreateQuiz}
+        aria-label="Create a new quiz"
+        className="fixed bottom-20 right-4 z-30 w-14 h-14 rounded-full bg-primary-500 hover:bg-primary-600 text-white shadow-lg flex items-center justify-center transition-transform active:scale-95"
+      >
+        <Plus className="w-6 h-6" aria-hidden="true" />
+      </button>
     </div>
   );
 }
