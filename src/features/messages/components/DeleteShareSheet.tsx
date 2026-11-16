@@ -42,7 +42,7 @@ export const DeleteShareSheet: React.FC<DeleteShareSheetProps> = ({ share, onClo
           <button
             type="button"
             onClick={() => handleButtonClick('me')}
-            className="w-full py-3 px-4 text-left text-sm border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 flex items-center gap-3 transition-colors hover:bg-gray-200 dark:hover:bg-gray-600"
+            className="w-full py-3 px-4 text-left text-sm dark:text-gray-100 bg-gray-50 dark:bg-gray-800 flex items-center gap-3 transition-colors hover:bg-gray-200 dark:hover:bg-gray-600"
           >
             <span className="flex-1">Delete for you</span>
           </button>
@@ -51,7 +51,7 @@ export const DeleteShareSheet: React.FC<DeleteShareSheetProps> = ({ share, onClo
             <button
               type="button"
               onClick={() => handleButtonClick('everyone')}
-              className="w-full py-3 px-4 text-left text-sm bg-red-50/30 dark:bg-red-900/20 flex items-center gap-3 transition-colors hover:bg-red-100 dark:hover:bg-red-900/30"
+              className="w-full py-3 px-4 text-left text-sm flex items-center gap-3 transition-colors bg-gray-50 dark:bg-gray-800 hover:bg-red-100 dark:hover:bg-red-900/30"
             >
               <span className="flex-1 text-red-600 dark:text-red-400">Delete for everyone</span>
             </button>
