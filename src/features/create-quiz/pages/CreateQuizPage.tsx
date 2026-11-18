@@ -38,7 +38,7 @@ type Attachment = {
 // Combined extracted-text budget across accepted attachments (decided in
 // selection order): the file that would push the total past this limit is
 // neglected with an error instead of being silently truncated.
-const MAX_TOTAL_CONTEXT_CHARS = 100_000;
+const MAX_TOTAL_CONTEXT_CHARS = 35_000;
 
 // Every attachment transition is a pure reducer action. The 100,000-char
 // budget is DERIVED at decision time (sum of accepted rows), so removing
@@ -591,7 +591,7 @@ export function CreateQuizPage() {
               <p className="text-xs text-gray-500 dark:text-slate-400 leading-relaxed">
                 Supports: DOCX, PDF, PPTX • Select several*
                 <br />
-                100,000-character combined limit
+                35,000-character combined limit
               </p>
             </div>
           </div>
