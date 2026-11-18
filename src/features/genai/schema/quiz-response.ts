@@ -148,27 +148,49 @@ function validateQuizQuestion(question: unknown): question is QuizQuestion {
 }
 
 /**
- * Case-insensitive answer comparison for identification questions
+ * Generates singular/plural variants of an answer for flexible matching.
+ * Returns the normalized (trimmed, lowercased) form plus:
+ * - If it ends with 's' (length > 1), also the form with trailing 's' removed (singular variant)
+ * - If it doesn't end with 's', also the form with 's' appended (plural variant)
+ */
+export function answerVariants(text: string): string[] {
+  if (!text || text.trim().length === 0) return [''];
+  const normalized = text.trim().toLowerCase();
+  const variants = new Set([normalized]);
+  if (normalized.endsWith('s') && normalized.length > 1) {
+    variants.add(normalized.slice(0, -1));
+  } else {
+    variants.add(normalized + 's');
+  }
+  return Array.from(variants);
+}
+
+/**
+ * Case-insensitive answer comparison for identification questions.
+ * Accepts singular/plural forms (e.g. "apple" matches "apples").
  */
 export function checkIdentificationAnswer(userAnswer: string, correctAnswer: string, acceptableAnswers?: string[]): boolean {
-  const normalizedUser = userAnswer.trim().toLowerCase();
-  const normalizedCorrect = correctAnswer.trim().toLowerCase();
+  const userVariants = answerVariants(userAnswer);
+  const correctVariants = answerVariants(correctAnswer);
 
-  if (normalizedUser === normalizedCorrect) return true;
+  if (userVariants.some(v => correctVariants.includes(v))) return true;
 
   if (acceptableAnswers) {
-    return acceptableAnswers.some(ans => ans.trim().toLowerCase() === normalizedUser);
+    return acceptableAnswers.some(ans =>
+      userVariants.some(v => answerVariants(ans).includes(v))
+    );
   }
 
   return false;
 }
 
 /**
- * Case-insensitive answer comparison for enumeration questions
+ * Case-insensitive answer comparison for enumeration questions.
  * Returns { correct: number, total: number, passed: boolean }
  * When ordered is true, answers must match by position. When false (default),
  * order does not matter — each correct answer is counted if it appears anywhere
  * in the user's answers.
+ * Accepts singular/plural forms (e.g. "apple" matches "apples").
  */
 export function checkEnumerationAnswer(
   userAnswers: string[],
@@ -176,22 +198,30 @@ export function checkEnumerationAnswer(
   minCorrect?: number,
   ordered: boolean = false
 ): { correct: number; total: number; passed: boolean } {
-  const normalizedUser = userAnswers.map(a => a.trim().toLowerCase());
+  const normalizedUser = userAnswers.map(a => (a ? a.trim().toLowerCase() : ''));
   const normalizedCorrect = correctAnswers.map(a => a.trim().toLowerCase());
 
   let correct = 0;
   if (ordered) {
     // Positional comparison — answers must match by index
     for (let i = 0; i < normalizedCorrect.length; i++) {
-      if (normalizedUser[i] === normalizedCorrect[i]) {
+      if (!normalizedUser[i]) continue; // user didn't answer this position
+      const userVariants = answerVariants(normalizedUser[i]);
+      const correctVariants = answerVariants(normalizedCorrect[i]);
+      if (userVariants.some(v => correctVariants.includes(v))) {
         correct++;
       }
     }
   } else {
     // Set-based matching — order does not matter
-    const userSet = new Set(normalizedUser.filter(a => a.length > 0));
+    const userVariantSet = new Set(
+      normalizedUser
+        .filter(a => a.length > 0)
+        .flatMap(a => answerVariants(a))
+    );
     for (const ans of normalizedCorrect) {
-      if (userSet.has(ans)) {
+      const correctVariants = answerVariants(ans);
+      if (correctVariants.some(v => userVariantSet.has(v))) {
         correct++;
       }
     }

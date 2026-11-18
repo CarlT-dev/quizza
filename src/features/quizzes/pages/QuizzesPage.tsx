@@ -1,16 +1,23 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth';
+import { useQueryClient } from '@tanstack/react-query';
 import {
-  getUserQuizzes,
-  getUserQuizCount,
   deleteQuiz,
   saveQuizTitle,
+  saveQuizColorPreference,
   type QuizDocument,
+  type CardColorId,
 } from '@/features/quiz';
-import { useQuizProgress } from '@/features/quiz/hooks/useQuizProgress';
+import {
+  useUserQuizzes,
+  useUserQuizCount,
+  useQuizzesProgress,
+  useQuizzesColorPreferences,
+  useQuizzesTitles,
+} from '@/features/quiz/hooks/useQuizQueries';
 import { useQuizFavorites } from '@/features/quiz/hooks/useQuizFavorites';
-import { saveQuizColorPreference, type CardColorId } from '@/features/quiz/api/quiz';
+import { queryKeys } from '@/lib/queryKeys';
 import { QuizCardItem } from '../components/QuizCardItem';
 import { QuizCardSkeleton } from '../components/QuizCardSkeleton';
 import { Plus, AlertTriangle, Search, X, Star } from 'lucide-react';
@@ -20,11 +27,11 @@ import { ShareQuizSheet } from '@/features/messages';
 export function QuizzesPage() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
+  const queryClient = useQueryClient();
 
-  const [quizzes, setQuizzes] = useState<QuizDocument[]>([]);
-  const [quizCount, setQuizCount] = useState(3);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // React Query hooks for automatic caching and background refetching
+  const { data: quizzes = [], isLoading: quizzesLoading, error: quizzesError, refetch: refetchQuizzes } = useUserQuizzes(user?.uid, 50);
+  const { data: quizCount = 3 } = useUserQuizCount(user?.uid);
 
   // Expanding search (replaces the old Settings button that navigated to a 404)
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -39,52 +46,6 @@ export function QuizzesPage() {
 
   // Favorite stars (quizFavorites side-documents)
   const { favoriteIds, toggleFavorite } = useQuizFavorites(user?.uid);
-
-  // Fetch the user's quizzes
-  useEffect(() => {
-    if (authLoading) return;
-
-    let cancelled = false;
-
-    if (!user) {
-      setError('Please log in to view your quizzes');
-      setIsLoading(false);
-      return;
-    }
-
-    const fetchQuizzes = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
-        // Fetch quizzes and count (drives skeleton amount) in parallel
-        const [userQuizzes, countResult] = await Promise.all([
-          getUserQuizzes(user.uid, 50),
-          getUserQuizCount(user.uid).catch(() => null),
-        ]);
-        if (!cancelled) {
-          setQuizzes(userQuizzes);
-          if (countResult !== null) {
-            setQuizCount(countResult);
-          }
-        }
-      } catch (err) {
-        console.error('Failed to fetch quizzes:', err);
-        if (!cancelled) {
-          setError('Failed to load quizzes. Please try again.');
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    fetchQuizzes();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [user, authLoading]);
 
   // Focus the search input once it becomes visible - visibility:hidden elements
   // cannot be focused, so this can't happen in the click handler itself
@@ -101,12 +62,27 @@ export function QuizzesPage() {
     [quizzes]
   );
 
-  // Fetch progress and color preferences
-  const { progressMap, colorPrefsMap, titlePrefsMap, refetch: refetchProgress, updateColorPref, updateTitle, isLoading: progressLoading } = useQuizProgress({
-    quizIds,
-    userId: user?.uid,
-    enabled: !!user && quizIds.length > 0,
-  });
+  // Fetch progress, color preferences, and titles using React Query hooks with proper caching
+  const { data: progressMap = new Map() } = useQuizzesProgress(quizIds, user?.uid);
+  const { data: colorPrefsMap = new Map() } = useQuizzesColorPreferences(quizIds, user?.uid);
+  const { data: titlePrefsMap = new Map() } = useQuizzesTitles(quizIds, user?.uid);
+
+  // Optimistic update helpers using React Query cache
+  const updateColorPref = useCallback((quizId: string, colorId: CardColorId) => {
+    queryClient.setQueryData(queryKeys.quiz.quizzesColorPrefs(quizIds, user!.uid), (old: Map<string, CardColorId> | undefined) => {
+      const next = new Map(old ?? []);
+      next.set(quizId, colorId);
+      return next;
+    });
+  }, [queryClient, quizIds, user]);
+
+  const updateTitle = useCallback((quizId: string, title: string) => {
+    queryClient.setQueryData(queryKeys.quiz.quizzesTitles(quizIds, user!.uid), (old: Map<string, string> | undefined) => {
+      const next = new Map(old ?? []);
+      next.set(quizId, title);
+      return next;
+    });
+  }, [queryClient, quizIds, user]);
 
   // Live filter by title/topic
   const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -134,9 +110,12 @@ export function QuizzesPage() {
     [filteredQuizzes, isFavoritesView, favoriteIds]
   );
 
-  // Handle color change
+  // Handle color change with optimistic update
   const handleColorChange = useCallback(async (quizId: string, colorId: CardColorId) => {
     if (!user) return;
+
+    // Snapshot previous value for rollback
+    const previousColors = queryClient.getQueryData<Map<string, CardColorId>>(queryKeys.quiz.quizzesColorPrefs(quizIds, user.uid));
 
     // Optimistic update
     updateColorPref(quizId, colorId);
@@ -146,13 +125,20 @@ export function QuizzesPage() {
     } catch (err) {
       console.error('Failed to save color preference:', err);
       // Rollback on error
-      refetchProgress();
+      if (previousColors) {
+        queryClient.setQueryData(queryKeys.quiz.quizzesColorPrefs(quizIds, user.uid), previousColors);
+      } else {
+        queryClient.invalidateQueries({ queryKey: queryKeys.quiz.quizzesColorPrefs(quizIds, user.uid) });
+      }
     }
-  }, [user, refetchProgress, updateColorPref]);
+  }, [user, queryClient, quizIds, updateColorPref]);
 
   // Handle title change (rename) - optimistic update with rollback on failure
   const handleTitleChange = useCallback(async (quizId: string, newTitle: string) => {
     if (!user) return;
+
+    // Snapshot previous value for rollback
+    const previousTitles = queryClient.getQueryData<Map<string, string>>(queryKeys.quiz.quizzesTitles(quizIds, user.uid));
 
     // Optimistic update
     updateTitle(quizId, newTitle);
@@ -162,25 +148,25 @@ export function QuizzesPage() {
     } catch (err) {
       console.error('Failed to save quiz title:', err);
       // Rollback on error
-      refetchProgress();
+      if (previousTitles) {
+        queryClient.setQueryData(queryKeys.quiz.quizzesTitles(quizIds, user.uid), previousTitles);
+      } else {
+        queryClient.invalidateQueries({ queryKey: queryKeys.quiz.quizzesTitles(quizIds, user.uid) });
+      }
     }
-  }, [user, refetchProgress, updateTitle]);
+  }, [user, queryClient, quizIds, updateTitle]);
 
   const handleDeleteQuiz = useCallback(async (quizId: string) => {
     if (!user) return;
-    const prev = quizzes;
-    const prevCount = quizCount;
-    setQuizzes(prevQuizzes => prevQuizzes.filter(q => q.id !== quizId));
-    setQuizCount(c => Math.max(0, c - 1));
     try {
       await deleteQuiz(quizId, user.uid);
+      // Invalidate and refetch
+      refetchQuizzes();
     } catch (err) {
       console.error('Failed to delete quiz:', err);
-      setQuizzes(prev);
-      setQuizCount(prevCount);
       alert('Failed to delete quiz. Please try again.');
     }
-  }, [user, quizzes, quizCount]);
+  }, [user, refetchQuizzes]);
 
   const handleQuizClick = useCallback((quizId: string) => {
     navigate(`/quiz/${quizId}`);
@@ -199,24 +185,7 @@ export function QuizzesPage() {
   }, [navigate]);
 
   const handleRetry = () => {
-    if (!user) return;
-    setIsLoading(true);
-    setError(null);
-    Promise.all([
-      getUserQuizzes(user.uid, 50),
-      getUserQuizCount(user.uid).catch(() => null),
-    ])
-      .then(([data, countResult]) => {
-        setQuizzes(data);
-        if (countResult !== null) {
-          setQuizCount(countResult);
-        }
-      })
-      .catch(err => {
-        console.error('Failed to fetch quizzes:', err);
-        setError('Failed to load quizzes. Please try again.');
-      })
-      .finally(() => setIsLoading(false));
+    refetchQuizzes();
   };
 
   // Shared header for all states - search replaces the old (404) settings button
@@ -291,7 +260,9 @@ export function QuizzesPage() {
 
   // Single-return layout: the header persists across loading, error, empty and
   // list states. Content classes match the previous per-state returns exactly.
-  const showSkeletons = authLoading || isLoading || progressLoading;
+  // Only show skeleton on INITIAL load of main quizzes data (quizzesPending).
+  // Background refetches of count/progress (isFetching) should not show skeleton.
+  const showSkeletons = authLoading || (quizzes.length === 0 && quizzesLoading);
 
   const renderContent = () => {
     if (showSkeletons) {
@@ -305,13 +276,13 @@ export function QuizzesPage() {
       );
     }
 
-    if (error) {
+    if (quizzesError) {
       return (
         <div className="flex-1 flex items-center justify-center px-4 py-12">
           <div className="w-full max-w-md dark:bg-gray-800 p-8 text-center">
             <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
             <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Unable to Load Quizzes</h2>
-            <p className="text-gray-500 dark:text-gray-400 mb-6">{error}</p>
+            <p className="text-gray-500 dark:text-gray-400 mb-6">{quizzesError.message}</p>
             <Button onClick={handleRetry} className="w-full">
               Try Again
             </Button>

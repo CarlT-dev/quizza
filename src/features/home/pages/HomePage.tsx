@@ -1,11 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import {
-  getUserAttempts,
-  getQuizzesByIds,
-  type QuizDocument,
-  type QuizProgress,
+  useUserAttempts,
+  useQuizzesByIds,
 } from '@/features/quiz';
 import { UnfinishedQuizCard } from '@/features/quizzes/components/UnfinishedQuizCard';
 import { Button } from '@/shared/components/ui';
@@ -17,7 +15,7 @@ import { UserMenuContent } from '../components/UserMenuContent';
 import {
   getLastSeenNotificationsAt,
   markNotificationsSeen,
-  useNotifications,
+  useNotificationsQuery as useNotifications,
 } from '@/features/notifications';
 
 const MAX_UNFINISHED = 3;
@@ -27,65 +25,45 @@ export function HomePage() {
   const { user } = useAuth();
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
 
   // Notification feed for the bell's red dot; the panel's own copy lives in
   // NotificationContent (fresh per open).
-  const { notifications, refetch: refetchNotifications } = useNotifications();
+  const { data: notifications, refetch: refetchNotifications } = useNotifications(user?.uid);
   // Per-device "seen" marker — localStorage on purpose: opening the panel in
   // THIS browser clears the dot here only.
   const [lastSeenMs, setLastSeenMs] = useState(() => getLastSeenNotificationsAt());
 
   // Unfinished attempts ("continue where you left off")
-  const [unfinished, setUnfinished] = useState<Array<{ quiz: QuizDocument; progress: QuizProgress }>>([]);
+  const { data: attempts, isPending: attemptsPending } = useUserAttempts(user?.uid);
 
-  // Real initial load (replaces the old fake 600ms timer)
-  useEffect(() => {
-    let cancelled = false;
+  // Derive unfinished attempts from the cached attempts data
+  const unfinishedAttempts = useMemo(() => {
+    if (!attempts) return [];
+    return attempts
+      .filter(a => !a.completed && a.answeredCount > 0)
+      .sort((a, b) => b.lastAttemptAt.toMillis() - a.lastAttemptAt.toMillis())
+      .slice(0, MAX_UNFINISHED);
+  }, [attempts]);
 
-    // Deferred so setIsLoading isn't a synchronous effect setState
-    // (react(set-state-in-effect)) — same pattern as the quiz data hooks.
-    void Promise.resolve().then(async () => {
-      if (!user) {
-        setIsLoading(false);
-        return;
-      }
+  // Fetch quiz documents for unfinished attempts
+  const unfinishedQuizIds = useMemo(
+    () => unfinishedAttempts.map(a => a.quizId),
+    [unfinishedAttempts]
+  );
+  const { data: unfinishedQuizzes, isPending: quizzesPending } = useQuizzesByIds(unfinishedQuizIds);
 
-      try {
-        const attempts = await getUserAttempts(user.uid);
-        if (cancelled) return;
+  // Combine attempts with quiz data
+  const unfinished = useMemo(() => {
+    if (!unfinishedQuizzes || unfinishedAttempts.length === 0) return [];
+    const quizzesById = new Map(unfinishedQuizzes.map(q => [q.id, q]));
+    return unfinishedAttempts
+      .filter(a => quizzesById.has(a.quizId))
+      .map(a => ({ quiz: quizzesById.get(a.quizId)!, progress: a }));
+  }, [unfinishedQuizzes, unfinishedAttempts]);
 
-        // In-progress attempts: started but not completed, newest first
-        const unfinishedAttempts = attempts
-          .filter(a => !a.completed && a.answeredCount > 0)
-          .sort((a, b) => b.lastAttemptAt.toMillis() - a.lastAttemptAt.toMillis())
-          .slice(0, MAX_UNFINISHED);
-        const unfinishedQuizzes = unfinishedAttempts.length > 0
-          ? await getQuizzesByIds(unfinishedAttempts.map(a => a.quizId))
-          : [];
-        if (cancelled) return;
-
-        // A quiz doc can be gone (deleted since the attempt): drop those rows
-        const quizzesById = new Map(unfinishedQuizzes.map(q => [q.id, q]));
-        setUnfinished(
-          unfinishedAttempts
-            .filter(a => quizzesById.has(a.quizId))
-            .map(a => ({ quiz: quizzesById.get(a.quizId)!, progress: a }))
-        );
-      } catch (err) {
-        console.error('Failed to load home data:', err);
-        // Sections stay empty; the page still renders
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [user]);
+  // Overall loading state - only show skeleton on INITIAL load (isPending), not background refetches (isFetching)
+  // Notifications are separate - they have their own refetchInterval and shouldn't block the main content
+  const isLoading = attemptsPending || quizzesPending;
 
   const handleOpenQuiz = useCallback((quizId: string) => {
     navigate(`/quiz/${quizId}`);
