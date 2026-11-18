@@ -44,6 +44,7 @@ export function ResultPage() {
   const [filter, setFilter] = useState<ReviewFilter>('all');
   const [barWidth, setBarWidth] = useState(0);
   const [attempt, setAttempt] = useState<QuizProgress | null>(null);
+  const [isFetchingAttempt, setIsFetchingAttempt] = useState(false);
 
   const score = state?.score ?? attempt?.score ?? null;
 
@@ -56,10 +57,13 @@ export function ResultPage() {
 
     const fetchAttempt = async () => {
       try {
+        setIsFetchingAttempt(true);
         const attemptData = await getQuizProgress(quizId, user.uid);
         if (!cancelled) setAttempt(attemptData);
       } catch (err) {
         console.error('Failed to fetch saved attempt:', err);
+      } finally {
+        if (!cancelled) setIsFetchingAttempt(false);
       }
     };
 
@@ -177,7 +181,8 @@ export function ResultPage() {
   };
 
   // Guard: no score in location.state (direct refresh / stale deep link)
-  if (!score) {
+  // Only show error after attempt fetch completes (isFetchingAttempt === false)
+  if (!score && !isFetchingAttempt) {
     return (
       <div className="flex-1 bg-primary-50/10 dark:bg-gray-900 flex items-center justify-center px-4">
         <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl border border-red-200 dark:border-red-800 p-8 text-center">
