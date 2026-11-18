@@ -73,15 +73,13 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string)
           </button>
         )}
       </div>
-      {!toast.persistent && (
-        <button
-          onClick={() => onDismiss(toast.id)}
-          className="flex-shrink-0 text-white/70 hover:text-white p-1 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-amber-600 rounded"
-          aria-label="Dismiss"
-        >
-          <X className="w-4 h-4" aria-hidden="true" />
-        </button>
-      )}
+      <button
+        onClick={() => onDismiss(toast.id)}
+        className="flex-shrink-0 text-white/70 hover:text-white p-2 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-amber-600 rounded"
+        aria-label="Dismiss"
+      >
+        <X className="w-5 h-5" aria-hidden="true" />
+      </button>
     </div>
   );
 }

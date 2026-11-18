@@ -5,10 +5,20 @@ import { useState, useEffect } from 'react';
 /**
  * Persistent banner that shows at the top of the screen when offline,
  * and briefly shows a "back online" message when connection is restored.
+ * The offline banner can be dismissed by the user and will reappear
+ * on the next offline event.
  */
 export function OfflineBanner() {
   const { isOnline, wasOffline, acknowledgeReconnect } = useOnlineStatus();
   const [showReconnect, setShowReconnect] = useState(false);
+  const [isOfflineDismissed, setIsOfflineDismissed] = useState(false);
+
+  // Reset dismiss state when we go online (so banner shows on next offline event)
+  useEffect(() => {
+    if (isOnline) {
+      setIsOfflineDismissed(false);
+    }
+  }, [isOnline]);
 
   // Show "back online" notification for 5 seconds when reconnecting
   useEffect(() => {
@@ -23,7 +33,10 @@ export function OfflineBanner() {
   }, [wasOffline, acknowledgeReconnect]);
 
   // Nothing to show if online and not in reconnect notification period
-  if (isOnline && !showReconnect) return null;
+  // Also don't show offline banner if user dismissed it
+  const isOffline = !isOnline;
+  if (!isOffline && !showReconnect) return null;
+  if (isOffline && isOfflineDismissed) return null;
 
   return (
     <div
@@ -51,7 +64,7 @@ export function OfflineBanner() {
             <WifiOff className="w-4 h-4" aria-hidden="true" />
             <span>You're offline. Changes will sync when reconnected.</span>
             <button
-              onClick={acknowledgeReconnect}
+              onClick={() => setIsOfflineDismissed(true)}
               className="ml-2 px-2 py-1 text-xs bg-white/20 rounded hover:bg-white/30 transition-colors flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-amber-500"
               aria-label="Dismiss offline banner"
             >
