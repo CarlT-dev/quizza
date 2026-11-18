@@ -234,6 +234,15 @@ export function ResultPage() {
     <div className="flex-1 bg-primary-50/10 dark:bg-gray-900 flex flex-col">
       {/* Header with back chevron */}
       <header className="fixed inset-x-0 top-0 z-10 max-w-[500px] mx-auto bg-gradient-to-r from-primary-500 to-primary-600 rounded-b-3xl px-4 pb-4">
+        <svg
+          className="absolute inset-0 w-full h-full pointer-events-none"
+          viewBox="0 0 500 100"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <path d="M300 0 C380 10 420 60 500 40 L500 0 Z" fill="white" fillOpacity="0.10" />
+          <path d="M380 100 C420 70 460 60 500 30 L500 100 Z" fill="black" fillOpacity="0.12" />
+        </svg>
         <Button
           type="button"
           variant="ghost"
