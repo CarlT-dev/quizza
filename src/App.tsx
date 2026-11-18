@@ -3,18 +3,26 @@ import { GlobalPullToRefresh } from '@/features/refresh/components/GlobalPullToR
 import { AppRoutes } from '@/app/routes';
 import { AuthProvider } from '@/features/auth/context/AuthContext';
 import { BackButtonProvider } from '@/shared/context/BackButtonContext';
+import { QueryProvider } from '@/app/providers/QueryProvider';
+import { ToastProvider } from '@/shared/components/ui';
+import { OfflineBanner } from '@/shared/components/ui';
 
 function App() {
   return (
-    <AuthProvider>
-      <BackButtonProvider>
-        <PullToRefreshProvider>
-          <GlobalPullToRefresh>
-            <AppRoutes />
-          </GlobalPullToRefresh>
-        </PullToRefreshProvider>
-      </BackButtonProvider>
-    </AuthProvider>
+    <ToastProvider>
+      <QueryProvider>
+        <AuthProvider>
+          <BackButtonProvider>
+            <PullToRefreshProvider>
+              <GlobalPullToRefresh>
+                <OfflineBanner />
+                <AppRoutes />
+              </GlobalPullToRefresh>
+            </PullToRefreshProvider>
+          </BackButtonProvider>
+        </AuthProvider>
+      </QueryProvider>
+    </ToastProvider>
   );
 }
 

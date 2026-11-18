@@ -1,34 +1,26 @@
-import { useLocation } from 'react-router-dom';
-
 interface PageTransitionProps {
   children: React.ReactNode;
   className?: string;
 }
 
 /**
- * Simple no-animation page transition - just renders children
- * Avoids Framer Motion layout issues
+ * Page transition wrapper - does NOT force remount on navigation.
+ * Use this for instant navigation without React remount overhead.
  */
 export function PageTransition({ children, className = '' }: PageTransitionProps) {
-  const location = useLocation();
-
   return (
-    <div key={location.pathname} className={className}>
+    <div className={className}>
       {children}
     </div>
   );
 }
 
 /**
- * Simpler alternative: AnimatePage that just animates on mount/unmount
- * using CSS classes for better performance
+ * AnimatePage - same as PageTransition but intended for CSS-based animations.
+ * Add animation classes (e.g., animate-slide-in-right) to the className prop
+ * for enter animations without forcing remount.
  */
-interface AnimatePageProps {
-  children: React.ReactNode;
-  className?: string;
-}
-
-export function AnimatePage({ children, className = '' }: AnimatePageProps) {
+export function AnimatePage({ children, className = '' }: PageTransitionProps) {
   return (
     <div className={className}>
       {children}

@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronsLeft, ChevronsRight, Play, Loader2, AlertTriangle, RotateCcw, History } from 'lucide-react';
-import { getQuizById, saveQuizProgress, getQuizProgress } from '@/features/quiz';
+import { useQuizById, useQuizProgress, useSaveQuizProgress } from '@/features/quiz';
 import { useAuth } from '@/features/auth';
-import type { QuizDocument, QuizProgress } from '@/features/quiz/api/quiz';
+import type { QuizDocument } from '@/features/quiz/api/quiz';
 
 function mapQuizDocToQuiz(quizDoc: QuizDocument) {
   return {
@@ -59,80 +59,31 @@ export function QuizPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  // State for fetched quiz
-  const [quizData, setQuizData] = useState<ReturnType<typeof mapQuizDocToQuiz> | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  // Saved progress from Firestore — used to display correct progress on the
-  // start page and to restore the user's answers when they resume.
-  const [savedProgress, setSavedProgress] = useState<QuizProgress | null>(null);
+  // Fetch quiz and progress using React Query
+  const { data: quizDoc, isLoading: quizLoading, error: quizError } = useQuizById(quizId);
+  const { data: savedProgress, isLoading: progressLoading, refetch: refetchProgress } = useQuizProgress(quizId, user?.uid);
 
-  // Fetch quiz from Firestore
-  useEffect(() => {
-    if (!quizId) {
-      setError('No quiz ID provided');
-      setIsLoading(false);
-      return;
-    }
+  const quizData = quizDoc ? mapQuizDocToQuiz(quizDoc) : null;
+  const isLoading = quizLoading || progressLoading;
 
-    const fetchQuiz = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
-        const doc = await getQuizById(quizId);
-
-        if (doc) {
-          setQuizData(mapQuizDocToQuiz(doc));
-          // Fetch saved progress for this quiz so the start page shows the
-          // correct progress and the user can resume where they left off.
-          if (user) {
-            try {
-              const progress = await getQuizProgress(quizId, user.uid);
-              setSavedProgress(progress ?? null);
-            } catch (err) {
-              console.error('Failed to fetch progress:', err);
-              setSavedProgress(null);
-            }
-          }
-        } else {
-          setError('Quiz not found');
-        }
-      } catch (err) {
-        console.error('Failed to fetch quiz:', err);
-        setError('Failed to load quiz');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchQuiz();
-  }, [quizId]);
-
-  // State persisted across both views
+  // Quiz view state
   const [view, setView] = useState<'start' | 'quiz'>('start');
   const [currentIndex, setCurrentIndex] = useState(0);
   // Track whether we've initialized from saved progress (runs once per mount).
-  // handleRetake resets state explicitly and must not re-trigger this effect.
   const initRef = useRef(false);
-  // Set once the quiz view is entered (Start or Retake). The init effect only
-  // restores while this is still false, so a mid-quiz autosave refetch can
-  // never hijack live answers or the current position.
+  // Set once the quiz view is entered (Start or Retake).
   const startedRef = useRef(false);
   // Answer can be: number (multiple_choice/true_false), string (identification), string[] (enumeration)
   const [answers, setAnswers] = useState<Map<string, AnswerValue>>(new Map());
 
-  // Initialize from saved progress ONCE per mount: restore the saved answers
-  // (not just the position) so resuming after a refresh keeps every answer,
-  // then land on the first unanswered question.
+  // Save progress mutation
+  const saveProgressMutation = useSaveQuizProgress();
+
+  // Initialize from saved progress ONCE per mount
   useEffect(() => {
     if (initRef.current) return;
     if (!quizData || quizData.questions.length === 0) return;
     if (!savedProgress) return;
-    // Only restore before the quiz view is ever entered. On a FRESH attempt
-    // (no doc at mount) the first autosave refetch delivers savedProgress
-    // mid-quiz; restoring then would overwrite live answers and snap the
-    // position. Reading the ref (not view state) keeps this effect free of
-    // stale-closure and exhaustive-deps concerns.
     if (startedRef.current) return;
     initRef.current = true;
 
@@ -179,46 +130,39 @@ export function QuizPage() {
   // Count answered questions (for progress)
   const answeredCount = Array.from(answers.values()).filter(isAnsweredValue).length;
 
-  // Persist progress AND the answer values, so the quizzes list shows the
-  // strip and a refresh mid-quiz can restore every answer on resume.
-  // Debounced: the effect re-arms on every answers change (including
-  // identification/enumeration keystrokes) and writes once 800ms after the
-  // last change — one write per typing pause, with the final values.
-  // Gap (accepted): no flush-on-unmount, so a hard refresh within 800ms of an
-  // answer loses that answer until the next write or submit (submit always
-  // sends the full in-memory map).
+  // Persist progress AND the answer values, debounced
   useEffect(() => {
     if (view !== 'quiz' || !quizData || !user || !quizId || answeredCount === 0) return;
     const timer = setTimeout(async () => {
       try {
-        await saveQuizProgress(quizId, user.uid, {
-          answeredCount,
-          totalQuestions,
-          completed: false,
-          answers: serializeAnswers(answers),
+        await saveProgressMutation.mutateAsync({
+          quizId,
+          userId: user.uid,
+          progress: {
+            answeredCount,
+            totalQuestions,
+            completed: false,
+            answers: serializeAnswers(answers),
+          },
         });
+        // After successful save, refetch progress to keep start page in sync
+        await refetchProgress();
       } catch (err) {
         console.error('Failed to save quiz progress:', err);
       }
-      try {
-        const progress = await getQuizProgress(quizId, user.uid);
-        setSavedProgress(progress ?? null);
-      } catch (err) {
-        console.error('Failed to refresh progress after save:', err);
-      }
     }, 800);
     return () => clearTimeout(timer);
-  }, [view, quizData, user, answers, answeredCount, totalQuestions, quizId]);
+  }, [view, quizData, user, answers, answeredCount, totalQuestions, quizId, saveProgressMutation, refetchProgress]);
 
-  const handleSelectAnswer = (questionId: string, optionIndex: number) => {
+  const handleSelectAnswer = useCallback((questionId: string, optionIndex: number) => {
     setAnswers(prev => new Map(prev).set(questionId, optionIndex));
-  };
+  }, []);
 
-  const handleIdentificationAnswer = (questionId: string, value: string) => {
+  const handleIdentificationAnswer = useCallback((questionId: string, value: string) => {
     setAnswers(prev => new Map(prev).set(questionId, value));
-  };
+  }, []);
 
-  const handleEnumerationAnswer = (questionId: string, index: number, value: string) => {
+  const handleEnumerationAnswer = useCallback((questionId: string, index: number, value: string) => {
     setAnswers(prev => {
       const newMap = new Map(prev);
       const current = newMap.get(questionId) as string[] || [];
@@ -227,7 +171,7 @@ export function QuizPage() {
       newMap.set(questionId, updated);
       return newMap;
     });
-  };
+  }, []);
 
   const handleNext = () => {
     if (isLastQuestion) {
@@ -252,7 +196,7 @@ export function QuizPage() {
     setView('quiz');
   };
 
-  const handleRetake = () => {
+  const handleRetake = async () => {
     startedRef.current = true;
     setAnswers(new Map());
     setCurrentIndex(0);
@@ -263,12 +207,20 @@ export function QuizPage() {
     // and re-running it when the autosave refetch updates savedProgress would
     // teleport the user back mid-retake.
     if (user && quizId && quizData) {
-      saveQuizProgress(quizId, user.uid, {
-        answeredCount: 0,
-        totalQuestions,
-        completed: false,
-        answers: {},
-      }).catch(err => console.error('Failed to reset attempt on retake:', err));
+      try {
+        await saveProgressMutation.mutateAsync({
+          quizId,
+          userId: user.uid,
+          progress: {
+            answeredCount: 0,
+            totalQuestions,
+            completed: false,
+            answers: {},
+          },
+        });
+      } catch (err) {
+        console.error('Failed to reset attempt on retake:', err);
+      }
     }
   };
 
@@ -277,11 +229,15 @@ export function QuizPage() {
     // the quiz view, so the start page and quizzes list reflect the latest state.
     if (user && quizData && quizId && answeredCount > 0) {
       try {
-        await saveQuizProgress(quizId, user.uid, {
-          answeredCount,
-          totalQuestions,
-          completed: false,
-          answers: serializeAnswers(answers),
+        await saveProgressMutation.mutateAsync({
+          quizId,
+          userId: user.uid,
+          progress: {
+            answeredCount,
+            totalQuestions,
+            completed: false,
+            answers: serializeAnswers(answers),
+          },
         });
       } catch (err) {
         console.error('Failed to save progress before returning to start:', err);
@@ -291,8 +247,7 @@ export function QuizPage() {
     // retake progress instead of the stale completed state.
     if (user && quizId) {
       try {
-        const progress = await getQuizProgress(quizId, user.uid);
-        setSavedProgress(progress ?? null);
+        await refetchProgress();
       } catch (err) {
         console.error('Failed to refresh progress on return to start:', err);
       }
@@ -344,7 +299,7 @@ export function QuizPage() {
       );
     }
 
-    if (error) {
+    if (quizError) {
       return (
         <div className="flex-1 bg-primary-50/10 dark:bg-gray-900 flex flex-col">
           {renderStartHeader()}
@@ -352,7 +307,7 @@ export function QuizPage() {
             <div className="w-full max-w-md dark:bg-gray-800 p-8 text-center">
               <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
               <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Unable to load quiz</h2>
-              <p className="text-gray-500 dark:text-gray-400 mb-6">{error}</p>
+              <p className="text-gray-500 dark:text-gray-400 mb-6">{quizError instanceof Error ? quizError.message : String(quizError)}</p>
               <p className="text-sm text-gray-400 dark:text-gray-500">Showing demo quiz instead.</p>
             </div>
           </main>

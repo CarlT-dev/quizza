@@ -1,99 +1,32 @@
-import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight, AlertTriangle, MessageCircle } from 'lucide-react';
 import { useAuth } from '@/features/auth';
-import { getUserProfile } from '@/features/users';
 import { formatRelativeTime } from '@/shared/utils';
 import { getOtherParticipantUid, useFriendships } from '@/features/friends';
-import { getOtherParticipantId, getUserConvos, type ConvoDocument } from '../api/messages';
+import { getOtherParticipantId } from '../api/messages';
+import { useUserConvos, useUserProfiles } from '../hooks/useMessageQueries';
 import { MessagesPageSkeleton } from '../components/MessagesPageSkeleton';
 
 export function MessagesPage() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
-  const { friendships, isLoading: friendsLoading } = useFriendships();
+  const { friendships } = useFriendships();
 
-  const [convos, setConvos] = useState<ConvoDocument[]>([]);
-  const [names, setNames] = useState<Record<string, string>>({});
-  // True while the names effect is resolving usernames — rows stay as
-  // skeletons until it settles, so a uid slice never renders.
-  const [namesLoading, setNamesLoading] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [reloadToken, setReloadToken] = useState(0);
-
-  useEffect(() => {
-    if (authLoading) return;
-    let cancelled = false;
-
-    // Deferred so setIsLoading isn't a synchronous effect setState
-    // (react(set-state-in-effect)) — same pattern as the quiz data hooks.
-    void Promise.resolve().then(async () => {
-      if (!user) {
-        setError('Please log in to view your messages');
-        setIsLoading(false);
-        return;
-      }
-
-      setIsLoading(true);
-      setError(null);
-      try {
-        const data = await getUserConvos(user.uid);
-        if (cancelled) return;
-        setConvos(data);
-      } catch (err) {
-        console.error('Failed to fetch conversations:', err);
-        if (!cancelled) setError('Failed to load conversations. Please try again.');
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [user, authLoading, reloadToken]);
-
-  // Resolve each unique other participant's current username — conversations
-  // AND friends — fetched fresh every visit, so renames show up. Falls back
-  // to a uid slice.
-  useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-
-    void Promise.resolve().then(async () => {
-      setNamesLoading(true);
-      const otherUids = [
+  // React Query hooks for automatic caching and background refetching
+  const { data: convos = [], isLoading: convosLoading, error: convosError, refetch: refetchConvos } = useUserConvos(user?.uid);
+  const allOtherUids = user
+    ? [
         ...new Set([
           ...convos.map(convo => getOtherParticipantId(convo, user.uid)),
           ...(friendships
             ? friendships.friends.map(f => getOtherParticipantUid(f, user.uid))
             : []),
         ]),
-      ];
-      const resolved = await Promise.all(
-        otherUids.map(async uid => {
-          try {
-            const profile = await getUserProfile(uid);
-            return [uid, profile?.name ?? profile?.username ?? uid.slice(0, 8)] as const;
-          } catch (err) {
-            console.error('Failed to load profile:', err);
-            return [uid, uid.slice(0, 8)] as const;
-          }
-        })
-      );
-      if (!cancelled) {
-        setNames(Object.fromEntries(resolved));
-        setNamesLoading(false);
-      }
-    });
+      ]
+    : [];
+  const { data: names = {} } = useUserProfiles(allOtherUids);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [user, convos, friendships]);
-
-  const handleRetry = () => setReloadToken(token => token + 1);
+  const handleRetry = () => refetchConvos();
 
   // Friends with no conversation yet appear as rows too, so a first share is
   // one tap away (they open into the empty convo page).
@@ -108,17 +41,19 @@ export function MessagesPage() {
   );
 
   const renderContent = () => {
-    if (authLoading || isLoading || friendsLoading || namesLoading) {
+    // Only show skeleton on INITIAL load of main convos data.
+    // Background refetches of names/friends (isFetching) should not show skeleton.
+    if (authLoading || (convos.length === 0 && convosLoading)) {
       return <MessagesPageSkeleton />;
     }
 
-    if (error) {
+    if (convosError) {
       return (
         <div className="flex-1 flex items-center justify-center px-4 py-12">
           <div className="w-full max-w-md dark:bg-gray-800 p-8 text-center">
             <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
             <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Unable to Load Messages</h2>
-            <p className="text-gray-500 dark:text-gray-400 mb-6">{error}</p>
+            <p className="text-gray-500 dark:text-gray-400 mb-6">{convosError.message}</p>
             <button
               type="button"
               onClick={handleRetry}
@@ -149,7 +84,7 @@ export function MessagesPage() {
 
     return (
       <div className="max-w-[500px] mx-auto">
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div className="bg-white dark:bg-gray-900 overflow-hidden">
           {convos.map((convo) => {
             const otherUid = user ? getOtherParticipantId(convo, user.uid) : '';
             const name = names[otherUid] ?? otherUid.slice(0, 8);

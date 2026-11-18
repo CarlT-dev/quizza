@@ -3,7 +3,8 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, AlertTriangle, MessageCircle, Share2, Check, Loader2, MoreVertical, Search, Edit, Trash2, UserX, X } from 'lucide-react';
 import { useAuth } from '@/features/auth';
 import { useUserProfile } from '@/features/users';
-import { getCardColor, getQuizzesColorPreferences, getUserQuizzes, type CardColorId, type QuizDocument } from '@/features/quiz/api/quiz';
+import { getCardColor } from '@/features/quiz/api/quiz';
+import { useUserQuizzes, useQuizzesColorPreferences } from '@/features/quiz/hooks/useQuizQueries';
 import { formatRelativeTime } from '@/shared/utils';
 import { BottomSheet, Button, ConfirmDialog, SlidePanel, Input } from '@/shared/components/ui';
 import { DeleteShareSheet } from '../components/DeleteShareSheet';
@@ -18,6 +19,13 @@ export function ConvoPage() {
   const { uid: otherUid } = useParams<{ uid: string }>();
   const { user, loading: authLoading } = useAuth();
   const { profile, isLoading: profileLoading } = useUserProfile(otherUid);
+
+  // React Query hooks for share sheet - cached for instant display, refetch on open
+  const { data: myQuizzes = [], refetch: refetchMyQuizzes } = useUserQuizzes(user?.uid, 20);
+  const { data: quizColors = new Map() } = useQuizzesColorPreferences(
+    myQuizzes.map(q => q.id).filter((id): id is string => Boolean(id)),
+    user?.uid
+  );
 
   const [shares, setShares] = useState<ShareDocument[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -40,13 +48,10 @@ export function ConvoPage() {
 
   // Share sheet: my quizzes + their user-set card colors, multi-select.
   const [isShareOpen, setIsShareOpen] = useState(false);
-  const [myQuizzes, setMyQuizzes] = useState<QuizDocument[]>([]);
-  const [quizColors, setQuizColors] = useState<Map<string, CardColorId>>(new Map());
   const [shareSheetLoading, setShareSheetLoading] = useState(false);
   const [shareSheetError, setShareSheetError] = useState<string | null>(null);
   const [selectedQuizIds, setSelectedQuizIds] = useState<Set<string>>(new Set());
   const [isSharing, setIsSharing] = useState(false);
-  const [shareSheetToken, setShareSheetToken] = useState(0);
 
   // Conversation menu panel
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -263,36 +268,16 @@ export function ConvoPage() {
     setUnfriendError(null);
   };
 
-  // Load my quizzes + their color preferences while the share sheet is open
-  // (fresh per open, so a just-created quiz shows up).
+  // Trigger refetch when share sheet opens to ensure fresh data (just-created quizzes show up)
+  // Cached data shows instantly; refetch happens in background
   useEffect(() => {
-    if (!isShareOpen || !user) return;
-    let cancelled = false;
-
-    void Promise.resolve().then(async () => {
+    if (isShareOpen && user) {
+      refetchMyQuizzes();
       setShareSheetLoading(true);
-      setShareSheetError(null);
-      try {
-        const quizzes = await getUserQuizzes(user.uid, 20);
-        if (cancelled) return;
-        setMyQuizzes(quizzes);
-        const colors = await getQuizzesColorPreferences(
-          quizzes.map(q => q.id).filter((id): id is string => Boolean(id)),
-          user.uid
-        );
-        if (!cancelled) setQuizColors(colors);
-      } catch (err) {
-        console.error('Failed to load your quizzes:', err);
-        if (!cancelled) setShareSheetError('Failed to load your quizzes. Please try again.');
-      } finally {
-        if (!cancelled) setShareSheetLoading(false);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isShareOpen, user, shareSheetToken]);
+      // Brief loading state for UX - cached data renders immediately
+      setTimeout(() => setShareSheetLoading(false), 300);
+    }
+  }, [isShareOpen, user, refetchMyQuizzes]);
 
   const toggleQuizSelection = (quizId: string) => {
     setSelectedQuizIds(prev => {
@@ -444,7 +429,11 @@ export function ConvoPage() {
     setDeleteError(null);
   }, []);
 
-  const handleShareSheetRetry = () => setShareSheetToken(token => token + 1);
+  const handleShareSheetRetry = () => {
+    refetchMyQuizzes();
+    setShareSheetLoading(true);
+    setTimeout(() => setShareSheetLoading(false), 300);
+  };
 
   const handleShareSelected = async () => {
     if (selectedQuizIds.size === 0 || isSharing || !user || !otherUid) return;

@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect, useReducer } from 'react';
 import { flushSync } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Upload, X, Loader2, AlertCircle, FileText, CopyCheck,
+import { ChevronLeft, Upload, Loader2, AlertCircle, FileText, CopyCheck,
   Folder, CircleHelp, ChartColumn, List, Info, Check, } from 'lucide-react';
 import { Button } from '@/shared/components/ui';
 import { useQuizGeneration } from '@/features/genai';

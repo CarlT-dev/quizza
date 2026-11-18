@@ -3,8 +3,8 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { AlertTriangle, ChevronLeft, Home, RotateCcw } from 'lucide-react';
 import { Button } from '@/shared/components/ui';
 import { useAuth } from '@/features/auth/context/AuthContext';
-import { getQuizById, getQuizProgress } from '@/features/quiz';
-import type { QuizDocument, QuizProgress } from '@/features/quiz/api/quiz';
+import { useQuizById, useQuizProgress } from '@/features/quiz';
+import type { QuizDocument } from '@/features/quiz/api/quiz';
 import type { QuizQuestion } from '@/features/genai/schema';
 import { computeIsCorrect, getCorrectAnswer, type AnswerValue, type ScoreDetail } from '../utils/answerReview';
 import { QuestionReviewCard } from '../components/QuestionReviewCard';
@@ -38,77 +38,18 @@ export function ResultPage() {
   const { user } = useAuth();
   const state = location.state as ResultLocationState | undefined;
 
-  const [quizData, setQuizData] = useState<ReturnType<typeof mapQuizDocToQuiz> | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<ReviewFilter>('all');
   const [barWidth, setBarWidth] = useState(0);
-  const [attempt, setAttempt] = useState<QuizProgress | null>(null);
-  const [isFetchingAttempt, setIsFetchingAttempt] = useState(false);
 
+  // Fetch quiz and attempt using React Query
+  const { data: quizDoc, isLoading: quizLoading, error: quizError } = useQuizById(quizId);
+  const { data: attempt, isLoading: attemptLoading } = useQuizProgress(quizId, user?.uid);
+
+  const quizData = quizDoc ? mapQuizDocToQuiz(quizDoc) : null;
+  const isLoading = quizLoading || attemptLoading;
+
+  // Score comes from location state (navigation from ScorePage) or from fetched attempt
   const score = state?.score ?? attempt?.score ?? null;
-
-  // Fetch saved attempt from Firestore when there's no location state score
-  // (e.g., direct page refresh or deep link to /quiz/:quiz/result)
-  useEffect(() => {
-    if (!quizId || !user || state?.score) return;
-
-    let cancelled = false;
-
-    const fetchAttempt = async () => {
-      try {
-        setIsFetchingAttempt(true);
-        const attemptData = await getQuizProgress(quizId, user.uid);
-        if (!cancelled) setAttempt(attemptData);
-      } catch (err) {
-        console.error('Failed to fetch saved attempt:', err);
-      } finally {
-        if (!cancelled) setIsFetchingAttempt(false);
-      }
-    };
-
-    fetchAttempt();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [quizId, user, state?.score]);
-
-  // Fetch the quiz doc so review rows can show question text, options and type.
-  // Skipped entirely when there is no score (direct refresh): the !score guard
-  // below renders the error card without a spinner or a wasted Firestore read.
-  useEffect(() => {
-    if (!quizId || !score) return;
-
-    let cancelled = false;
-
-    const fetchQuiz = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
-        const doc = await getQuizById(quizId);
-
-        if (cancelled) return;
-
-        if (doc) {
-          setQuizData(mapQuizDocToQuiz(doc));
-        } else {
-          setError('Quiz not found');
-        }
-      } catch (err) {
-        console.error('Failed to fetch quiz:', err);
-        if (!cancelled) setError('Failed to load quiz');
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    };
-
-    fetchQuiz();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [quizId, score]);
 
   const username = user?.displayName || user?.email?.split('@')[0] || 'User';
   const userInitial = username.charAt(0).toUpperCase();
@@ -119,8 +60,7 @@ export function ResultPage() {
     ? Math.min(100, Math.max(0, Math.round((correctCount / total) * 100)))
     : 0;
 
-  // Animate the bar from 0% to the final percentage once the page has data:
-  // the bar first paints at width 0, then this re-render triggers the transition.
+  // Animate the bar from 0% to the final percentage once the page has data
   useEffect(() => {
     if (!quizData) return;
     const raf = requestAnimationFrame(() => setBarWidth(percentage));
@@ -142,8 +82,6 @@ export function ResultPage() {
       }));
     }
     // Reconstruct from quiz questions and attempt answers when details are unavailable
-    // (e.g. attempts saved before details were persisted, or direct page refresh
-    // without location state). Uses quizData + attempt.answers as the fallback source.
     if (quizData && attempt) {
       const answers = attempt.answers;
       if (!answers) return [];
@@ -181,8 +119,8 @@ export function ResultPage() {
   };
 
   // Guard: no score in location.state (direct refresh / stale deep link)
-  // Only show error after attempt fetch completes (isFetchingAttempt === false)
-  if (!score && !isFetchingAttempt) {
+  // Only show error after attempt fetch completes (attemptLoading === false)
+  if (!score && !attemptLoading) {
     return (
       <div className="flex-1 bg-primary-50/10 dark:bg-gray-900 flex items-center justify-center px-4">
         <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl border border-red-200 dark:border-red-800 p-8 text-center">
@@ -211,13 +149,13 @@ export function ResultPage() {
     );
   }
 
-  if (error || !quizData) {
+  if (quizError || !quizData) {
     return (
       <div className="flex-1 bg-primary-50/10 dark:bg-gray-900 flex items-center justify-center px-4">
         <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl border border-red-200 dark:border-red-800 p-8 text-center">
           <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Unable to Load Results</h2>
-          <p className="text-gray-500 dark:text-gray-400 mb-6">{error ?? 'Could not load this quiz.'}</p>
+          <p className="text-gray-500 dark:text-gray-400 mb-6">{quizError instanceof Error ? quizError.message : (quizError ?? 'Could not load this quiz.')}</p>
           <button
             onClick={handleBackHome}
             className="px-6 py-2 bg-primary-500 text-white rounded-xl hover:bg-primary-600 transition-colors"

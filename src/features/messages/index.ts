@@ -10,7 +10,8 @@ export {
   type ShareDocument,
   type DeleteShareMode,
 } from './api/messages';
-
+export { useUserConvos, useUserProfiles } from './hooks/useMessageQueries';
+export { useShareQuizToUser } from './hooks/useMessageMutations';
 export { ShareQuizSheet } from './components/ShareQuizSheet';
 export { DeleteShareSheet } from './components/DeleteShareSheet';
 export { MessagesPage } from './pages/MessagesPage';
