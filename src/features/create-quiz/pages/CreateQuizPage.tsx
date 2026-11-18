@@ -4,8 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Upload, X, Loader2, AlertCircle, FileText, CopyCheck,
   Folder, CircleHelp, ChartColumn, List, Info, Check, } from 'lucide-react';
 import { Button } from '@/shared/components/ui';
-import { Card, CardTitle } from '@/shared/components/ui';
-import { Box, BoxTitle, BoxContent } from '@/shared/components/ui/Box';
 import { useQuizGeneration } from '@/features/genai';
 import type { GenerationResult } from '@/features/genai';
 import { createQuizRequest } from '@/features/genai/schema';

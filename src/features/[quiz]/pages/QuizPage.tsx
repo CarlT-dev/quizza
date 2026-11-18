@@ -660,9 +660,6 @@ export function QuizPage() {
               {!isLastQuestion && (
                 <ChevronsRight className="w-5 h-5" aria-hidden="true" />
               )}
-              {isLastQuestion && (
-                <Loader2 className="w-5 h-5" aria-hidden="true" />
-              )}
             </button>
           </div>
         </div>
