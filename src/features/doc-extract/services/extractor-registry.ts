@@ -15,7 +15,7 @@ import { pptxAdapter } from './adapters/pptx.adapter';
 export const MAX_FILE_BYTES = 20 * 1024 * 1024; // 20MB
 
 /** Hard cap on extracted text handed to the AI (head-biased truncation). */
-export const MAX_CONTEXT_CHARS = 100_000;
+export const MAX_CONTEXT_CHARS = 35_000;
 
 const registry = new Map<string, ExtractorAdapter>();
 
