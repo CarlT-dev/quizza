@@ -204,7 +204,7 @@ export function QuestionReviewCard({ detail, question, index, perspective = 'sel
                           <p className={`text-sm ${isBlank ? 'text-gray-400 dark:text-gray-500 italic' : 'font-medium text-gray-900 dark:text-gray-100'}`}>
                             {isBlank ? 'Not answered' : userItem}
                           </p>
-                          {!isMatch && !isBlank && (
+                          {!isMatch && (
                             <p className="mt-1 text-xs text-green-700 dark:text-green-300">
                               Correct: {correctItem}
                             </p>

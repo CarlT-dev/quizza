@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { FooterNav } from './FooterNav';
-import { PageTransition } from '@/shared/components/ui';
+import { AnimatePage } from '@/shared/components/ui';
 
 interface LayoutProps {
   children: ReactNode;
@@ -35,8 +35,8 @@ export function Layout({
           </header>
         )}
 
-        {/* App content - wrapped in PageTransition for slide transitions */}
-        <PageTransition className='bg-inherit dark:bg-gray-900 flex-1 min-h-0 flex flex-col'>{children}</PageTransition>
+        {/* App content - wrapped in AnimatePage for CSS slide transitions without remount */}
+        <AnimatePage className='bg-inherit dark:bg-gray-900 flex-1 min-h-0 flex flex-col animate-slide-in-right'>{children}</AnimatePage>
 
         {/* FooterNav - OUTSIDE AnimatePage so it stays visible during transitions */}
         {showFooterNav && (

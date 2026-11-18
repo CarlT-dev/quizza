@@ -14,3 +14,5 @@ export {
   type FriendRequestErrorCode,
 } from './api/friends';
 export { useFriendships } from './hooks/useFriendships';
+export { useFriendships as useFriendshipsQuery } from './hooks/useFriendQueries';
+export { useSendFriendRequest, useAcceptFriendRequest, useDeclineFriendRequest, useCancelFriendRequest, useRemoveFriend } from './hooks/useFriendMutations';

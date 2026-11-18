@@ -1,5 +1,5 @@
 import { AlertTriangle, UserX } from 'lucide-react';
-import { useCurrentUserProfile } from '../hooks/useCurrentUserProfile';
+import { useCurrentUserProfileQuery as useCurrentUserProfile } from '../hooks/useCurrentUserProfileQuery';
 import { ProfileHeader } from '../components/ProfileHeader';
 import { CreatedQuizzes } from '../components/CreatedQuizzes';
 import { Button } from '@/shared/components/ui';
